@@ -29,7 +29,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           ? await authClient.signUp.email({ name, email, password, timezone } as Parameters<typeof authClient.signUp.email>[0])
           : await authClient.signIn.email({ email, password });
       if (res.error) {
-        setError(res.error.message || (mode === "login" ? "Email or password is incorrect." : "We couldn't create your account."));
+        const status = (res.error as { status?: number }).status ?? 0;
+        setError(
+          status >= 500
+            ? `The server hit a problem (error ${status}), so nothing was saved. Please try again shortly.`
+            : res.error.message || (mode === "login" ? "Email or password is incorrect." : "We couldn't create your account."),
+        );
         return;
       }
       router.replace("/dashboard");

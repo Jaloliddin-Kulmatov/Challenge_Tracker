@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --surface-2: #f0f0ec;
+  --border: #e3e3dd;
+  --foreground: #161614;
+  --muted: #5d5d56;
+  --subtle: #8a8a82;
+  --primary: #0f7a5c;
+  --primary-fg: #ffffff;
+  --danger: #c0392b;
+  --warning: #a86400;
+  --success: #0f7a5c;
+  --accent: #0f7a5c;
+  --chart-actual: #2a78d6;
+  --chart-plan: #8a8a82;
+  --chart-grid: #e8e8e2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: #121211;
+    --surface: #1b1b19;
+    --surface-2: #262623;
+    --border: #33332f;
+    --foreground: #f1f0ec;
+    --muted: #b4b3aa;
+    --subtle: #85857c;
+    --primary: #34c597;
+    --primary-fg: #06231b;
+    --danger: #ff7b6b;
+    --warning: #e0a030;
+    --success: #34c597;
+    --accent: #34c597;
+    --chart-actual: #3987e5;
+    --chart-plan: #85857c;
+    --chart-grid: #2c2c29;
+  }
+}
+
+/* per-challenge accent colour */
+[data-accent="emerald"] { --accent: #0f7a5c; }
+[data-accent="sky"] { --accent: #0b73b8; }
+[data-accent="violet"] { --accent: #6250d6; }
+[data-accent="amber"] { --accent: #b36b00; }
+[data-accent="rose"] { --accent: #c4325a; }
+[data-accent="teal"] { --accent: #0d7f86; }
+[data-accent="orange"] { --accent: #c4551d; }
+[data-accent="slate"] { --accent: #4b5563; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-accent="emerald"] { --accent: #34c597; }
+  :root:not([data-theme="light"]) [data-accent="sky"] { --accent: #4aa8e8; }
+  :root:not([data-theme="light"]) [data-accent="violet"] { --accent: #9085e9; }
+  :root:not([data-theme="light"]) [data-accent="amber"] { --accent: #e0a030; }
+  :root:not([data-theme="light"]) [data-accent="rose"] { --accent: #ee7a9b; }
+  :root:not([data-theme="light"]) [data-accent="teal"] { --accent: #3cc3cb; }
+  :root:not([data-theme="light"]) [data-accent="orange"] { --accent: #f08a55; }
+  :root:not([data-theme="light"]) [data-accent="slate"] { --accent: #aab3c0; }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-accent: var(--accent);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+/* 16px inputs stop iOS Safari zooming the page on focus */
+input, select, textarea { font-size: 16px; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
+.tabular { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

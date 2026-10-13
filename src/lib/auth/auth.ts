@@ -5,13 +5,13 @@ import { nextCookies } from "better-auth/next-js";
 import { getDb } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { isValidTimeZone } from "@/lib/core/dates";
+import { authBaseUrl, trustedOrigins } from "./origins";
 
 function create() {
-  const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
   return betterAuth({
-    baseURL,
+    baseURL: authBaseUrl(),
     secret: process.env.BETTER_AUTH_SECRET,
-    trustedOrigins: [baseURL],
+    trustedOrigins: trustedOrigins(),
     database: drizzleAdapter(getDb(), {
       provider: "pg",
       schema: { user: schema.user, session: schema.session, account: schema.account, verification: schema.verification },

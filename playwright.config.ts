@@ -23,9 +23,11 @@ export default defineConfig({
   ],
   webServer: {
     command: `npx next start -p ${PORT}`,
-    url: `http://localhost:${PORT}/api/health`,
+    // A static page: the app must count as "up" even before the test database has its tables
+    // (global setup migrates it after the server starts), so don't wait on /api/health.
+    url: `http://localhost:${PORT}/manifest.webmanifest`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { DATABASE_URL: DB, BETTER_AUTH_URL: `http://localhost:${PORT}`, BETTER_AUTH_SECRET: "e2e-only-secret-0123456789abcdef0123456789", NODE_ENV: "production" },
+    env: { DATABASE_URL: DB, BETTER_AUTH_URL: `http://localhost:${PORT}`, BETTER_AUTH_SECRET: "e2e-only-secret-0123456789abcdef0123456789", NODE_ENV: "production", AUTH_RATE_LIMIT: "off" },
   },
 });

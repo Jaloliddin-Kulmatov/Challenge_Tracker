@@ -49,6 +49,7 @@ ENABLE_DEMO_SEED=true npm run db:seed     # demo@example.com / demo-password-123
 | `DATABASE_URL` | yes | PostgreSQL connection string (server-side only) |
 | `BETTER_AUTH_SECRET` | yes (prod) | Signs sessions/cookies. ≥ 32 random chars. Never commit it |
 | `BETTER_AUTH_URL` | yes | Public base URL, e.g. `https://tracker.example.com` (also the trusted origin) |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | optional | Extra origins allowed to sign in (comma-separated). Vercel's own deployment/branch/production URLs are trusted automatically; without this, any other hostname gets "Invalid origin" |
 | `TEST_DATABASE_URL` | tests | Disposable DB whose name **must end in `_test`** (it is wiped) |
 | `E2E_DATABASE_URL` | e2e | Disposable DB whose name **must end in `_e2e`** |
 | `ENABLE_DEMO_SEED` | seed only | Must be `true` for `db:seed` to run |
@@ -76,7 +77,7 @@ npm run db:migrate        # apply migrations
 2. Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` on the host.
 3. Run migrations as a release step: `npm run db:migrate` (idempotent).
 4. `npm run build && npm run start` – or deploy to Vercel / any Node host / a container (`next start`, port 3000).
-5. Health check: `GET /api/health` (checks the database).
+5. Health check: `GET /api/health` – returns `ok`, or says what is missing: `migrations_missing` (run `npm run db:migrate`), `auth_secret_missing`, or `database_unavailable`.
 
 The app is a stateless Next.js server; scale horizontally behind any load balancer.
 

@@ -33,6 +33,9 @@ function create() {
         },
       },
     },
+    // Better Auth allows 3 sign-in/sign-up requests per 10 s per address in production. Keep that for real users;
+    // only the automated browser tests (which log in repeatedly from one address) switch it off.
+    rateLimit: process.env.AUTH_RATE_LIMIT === "off" ? { enabled: false } : undefined,
     advanced: { cookiePrefix: "challenge-tracker" },
     plugins: [nextCookies()],
   });

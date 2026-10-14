@@ -75,7 +75,7 @@ npm run db:migrate        # apply migrations
 1. Provision PostgreSQL (Supabase, Neon, RDS, … – any Postgres ≥ 14). With Supabase use the **pooled**
    connection string; prepared statements are disabled automatically for it.
 2. Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` on the host.
-3. Run migrations as a release step: `npm run db:migrate` (idempotent).
+3. Migrations: on **Vercel this is automatic** – the `vercel-build` script runs `tsx scripts/migrate.ts` (idempotent) before `next build`, so every deploy creates/updates the tables in the database `DATABASE_URL` points to. On other hosts run `npm run db:migrate` as a release step.
 4. `npm run build && npm run start` – or deploy to Vercel / any Node host / a container (`next start`, port 3000).
 5. Health check: `GET /api/health` – returns `ok`, or says what is missing: `migrations_missing` (run `npm run db:migrate`), `auth_secret_missing`, or `database_unavailable`.
 

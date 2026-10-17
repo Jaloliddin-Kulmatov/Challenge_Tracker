@@ -6,6 +6,7 @@
  * what the service layer's authorization checks rely on.
  */
 import { sql } from "drizzle-orm";
+import type { PlanContent } from "@/lib/plan/types";
 import {
   boolean,
   check,
@@ -324,7 +325,10 @@ export const challengeShares = pgTable(
 // Semester plans (a fixed plan template the user ticks off day by day)
 // ---------------------------------------------------------------------------
 
-/** One started plan per user per template. The plan's *content* lives in code; only ticks and numbers are stored. */
+/**
+ * One started plan per user per template. The default content lives in code; `content` holds the user's edits
+ * (goals, tasks, targets…) when they have made any. Ticks and numbers are stored separately.
+ */
 export const plans = pgTable(
   "plans",
   {
@@ -333,6 +337,7 @@ export const plans = pgTable(
     templateKey: text("template_key").notNull(),
     startDate: day("start_date").notNull(),
     endDate: day("end_date").notNull(),
+    content: jsonb().$type<PlanContent>(),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [

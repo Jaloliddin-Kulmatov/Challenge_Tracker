@@ -18,6 +18,8 @@ export interface DailyTask {
   detailByWeekday?: Record<number, string>;
   /** Append the week's long-run target on this weekday (e.g. Thursday). */
   appendLongRunOn?: number;
+  /** Label for the monthly "habits" count, e.g. "German days". Tasks without one aren't counted monthly. */
+  habit?: string;
 }
 
 /** A task that repeats every week and is ticked per week. */
@@ -53,7 +55,17 @@ export interface MonthPlan {
   youtube: number;
   instagram: number;
   longRunKm: number;
+  /** Target weight at the end of the month; null = a straight line from the first logged weight to the goal. */
+  weightKg: number | null;
+  /** How many of the plan's books should be finished by the end of the month. */
+  books: number;
   results: { id: string; text: string }[];
+}
+
+/** A book to finish, ticked once. */
+export interface PlanBook {
+  id: string;
+  title: string;
 }
 
 export interface WeekPlan {
@@ -68,16 +80,22 @@ export interface KeyDate {
   what: string;
 }
 
+/** The parts of a plan the user can edit; stored per user, the template's own copy is the default. */
+export type PlanContent = Pick<PlanTemplate, "goals" | "dailyTasks" | "weeklyGoals" | "books" | "months" | "weeks">;
+
 export interface PlanTemplate {
   key: string;
   title: string;
   subtitle: string;
   startDate: ISODate;
   endDate: ISODate;
+  /** The weight goal at the end of the plan; monthly weight targets are a straight line to it. */
+  weightGoalKg: number;
   intro: string;
   goals: PlanGoal[];
   dailyTasks: DailyTask[];
   weeklyGoals: WeeklyGoal[];
+  books: PlanBook[];
   schedule: ScheduleDay[];
   months: MonthPlan[];
   weeks: WeekPlan[];

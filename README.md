@@ -28,8 +28,13 @@ Vitest + Playwright.
 today's checklist (9 things Mon–Sat, a short rest-day list on Sunday), monthly goals (this month + next), a card for each of
 the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
 
-* The plan's *content* lives in code (`src/lib/plan/malaysia-semester4.ts`); the database only stores ticks
-  (`plan_checks`) and the Sunday numbers (`plan_metrics`), one `plans` row per user.
+* The plan's *default content* lives in code (`src/lib/plan/malaysia-semester4.ts`). Everything the user edits on
+  `/plan/edit` (goals, daily tasks and their weekdays/time, weekly goals, books, monthly targets and results, weekly
+  tasks) is stored as one validated JSON document in `plans.content` and laid over the default
+  (`src/lib/plan/content.ts`); items keep their ids, so ticks follow a renamed task and a removed task's ticks stop
+  counting. Ticks (`plan_checks`) and the Sunday numbers (`plan_metrics`) are stored separately, one `plans` row per user.
+* Monthly numbers (YouTube, Instagram, weight, long run, books finished) are compared with each month's targets; the
+  weight target is a straight line from the first logged weight to the goal unless a month sets its own.
 * Rules (`src/lib/plan/logic.ts`): daily ticks only for today or earlier days and only on days a task applies; weekly
   goals only once the week has started; week-specific tasks, monthly results and goals may be ticked any time.
 * A failed save is undone on screen and reported – a tick never looks done unless the server stored it.

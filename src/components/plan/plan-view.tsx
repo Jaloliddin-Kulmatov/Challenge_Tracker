@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Flame, Penc
 import Link from "next/link";
 import * as React from "react";
 import { saveMetricsAction, setCheckAction } from "@/app/actions/plan";
+import { ReminderCard, type ReminderProps } from "@/components/plan/reminder-card";
 import { Tick } from "@/components/plan/tick";
 import { Badge, Card, CardTitle, ProgressBar } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/field";
@@ -23,11 +24,12 @@ interface Props {
   today: ISODate;
   initialChecks: string[];
   initialMetrics: MetricView[];
+  reminder: ReminderProps;
 }
 
 const pct = (c: Count) => (c.total === 0 ? 0 : (c.done / c.total) * 100);
 
-export function PlanView({ template: t, today, initialChecks, initialMetrics }: Props) {
+export function PlanView({ template: t, today, initialChecks, initialMetrics, reminder }: Props) {
   const templateKey = t.key;
   const toast = useToast();
   const [checks, setChecks] = React.useState<Set<string>>(() => new Set(initialChecks));
@@ -120,6 +122,7 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics }: 
             <div className="flex items-center gap-1 text-xs text-subtle"><Flame className="size-3.5" aria-hidden /> {perfect} perfect {perfect === 1 ? "day" : "days"}</div>
           </Card>
         </div>
+        <ReminderCard initial={reminder} />
         <nav aria-label="Sections" className="sticky top-14 z-10 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
           {[["goals", "Goals"], ["today", "Today"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"]].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-sm font-semibold text-muted hover:bg-border">{label}</a>

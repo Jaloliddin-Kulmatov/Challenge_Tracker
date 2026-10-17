@@ -11,6 +11,7 @@ import {
   check,
   date,
   index,
+  integer,
   jsonb,
   numeric,
   pgEnum,
@@ -319,6 +320,67 @@ export const challengeShares = pgTable(
   (t) => [index("cs_challenge_idx").on(t.challengeId)],
 );
 
+// ---------------------------------------------------------------------------
+// Semester plans (a fixed plan template the user ticks off day by day)
+// ---------------------------------------------------------------------------
+
+/** One started plan per user per template. The plan's *content* lives in code; only ticks and numbers are stored. */
+export const plans = pgTable(
+  "plans",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    ownerId: text("owner_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    templateKey: text("template_key").notNull(),
+    startDate: day("start_date").notNull(),
+    endDate: day("end_date").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("plans_owner_template_uq").on(t.ownerId, t.templateKey),
+    check("plans_dates", sql`${t.endDate} >= ${t.startDate}`),
+  ],
+);
+
+/** A ticked item: `task_key` says what ("daily:exercise"), `period_key` when ("2026-10-19", "W3", "once"). */
+export const planChecks = pgTable(
+  "plan_checks",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    planId: uuid("plan_id").notNull().references(() => plans.id, { onDelete: "cascade" }),
+    taskKey: text("task_key").notNull(),
+    periodKey: text("period_key").notNull(),
+    checkedAt: ts("checked_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("plan_checks_uq").on(t.planId, t.taskKey, t.periodKey),
+    check("plan_checks_len", sql`char_length(${t.taskKey}) between 1 and 80 and char_length(${t.periodKey}) between 1 and 20`),
+  ],
+);
+
+/** The numbers logged in the Sunday review (one row per plan week). */
+export const planMetrics = pgTable(
+  "plan_metrics",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    planId: uuid("plan_id").notNull().references(() => plans.id, { onDelete: "cascade" }),
+    week: smallint().notNull(),
+    weightKg: numeric("weight_kg", { precision: 4, scale: 1 }),
+    youtubeSubs: integer("youtube_subs"),
+    instagramSubs: integer("instagram_subs"),
+    longRunKm: numeric("long_run_km", { precision: 4, scale: 1 }),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("plan_metrics_uq").on(t.planId, t.week),
+    check("pm_week", sql`${t.week} between 1 and 60`),
+    check("pm_weight", sql`${t.weightKg} is null or ${t.weightKg} between 30 and 250`),
+    check("pm_subs", sql`(${t.youtubeSubs} is null or ${t.youtubeSubs} between 0 and 100000000) and (${t.instagramSubs} is null or ${t.instagramSubs} between 0 and 100000000)`),
+    check("pm_run", sql`${t.longRunKm} is null or ${t.longRunKm} between 0 and 200`),
+  ],
+);
+
+export type PlanRow = typeof plans.$inferSelect;
+export type PlanMetricRow = typeof planMetrics.$inferSelect;
 export type UserRow = typeof user.$inferSelect;
 export type ChallengeRow = typeof challenges.$inferSelect;
 export type ConfigurationRow = typeof challengeConfigurations.$inferSelect;

@@ -1,0 +1,138 @@
+import { and, eq } from "drizzle-orm";
+import { z } from "zod";
+import * as s from "@/lib/db/schema";
+import { compareDates, type ISODate } from "@/lib/core/dates";
+import { parseWeekPeriod, validateCheck, weekRange, checkKey } from "@/lib/plan/logic";
+import { DEFAULT_PLAN_KEY, getTemplate } from "@/lib/plan/templates";
+import { parseInput } from "@/lib/validation";
+import type { Ctx } from "./context";
+import { todayOf } from "./context";
+import { badState, invalid, notFound } from "./errors";
+
+export interface MetricView {
+  week: number;
+  weightKg: number | null;
+  youtubeSubs: number | null;
+  instagramSubs: number | null;
+  longRunKm: number | null;
+}
+
+export interface PlanData {
+  templateKey: string;
+  startDate: ISODate;
+  endDate: ISODate;
+  /** Every ticked item as "taskKey|period". */
+  checks: string[];
+  metrics: MetricView[];
+}
+
+const templateOf = (key: string) => {
+  const t = getTemplate(key);
+  if (!t) throw invalid("Unknown plan.");
+  return t;
+};
+
+async function findPlan(ctx: Ctx, templateKey: string) {
+  const [row] = await ctx.db
+    .select()
+    .from(s.plans)
+    .where(and(eq(s.plans.ownerId, ctx.user.id), eq(s.plans.templateKey, templateKey)))
+    .limit(1);
+  return row ?? null;
+}
+
+const num = (v: string | null) => (v === null ? null : Number(v));
+
+export async function hasPlan(ctx: Ctx): Promise<boolean> {
+  const rows = await ctx.db.select({ id: s.plans.id }).from(s.plans).where(eq(s.plans.ownerId, ctx.user.id)).limit(1);
+  return rows.length > 0;
+}
+
+export async function getPlanData(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Promise<PlanData | null> {
+  const plan = await findPlan(ctx, templateKey);
+  if (!plan) return null;
+  const [checks, metrics] = await Promise.all([
+    ctx.db.select().from(s.planChecks).where(eq(s.planChecks.planId, plan.id)),
+    ctx.db.select().from(s.planMetrics).where(eq(s.planMetrics.planId, plan.id)),
+  ]);
+  return {
+    templateKey: plan.templateKey,
+    startDate: plan.startDate,
+    endDate: plan.endDate,
+    checks: checks.map((c) => checkKey(c.taskKey, c.periodKey)),
+    metrics: metrics
+      .map((m) => ({ week: m.week, weightKg: num(m.weightKg), youtubeSubs: m.youtubeSubs, instagramSubs: m.instagramSubs, longRunKm: num(m.longRunKm) }))
+      .sort((a, b) => a.week - b.week),
+  };
+}
+
+/** Start the plan (idempotent: starting twice returns the same plan). */
+export async function startPlan(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Promise<PlanData> {
+  const t = templateOf(templateKey);
+  await ctx.db
+    .insert(s.plans)
+    .values({ ownerId: ctx.user.id, templateKey: t.key, startDate: t.startDate, endDate: t.endDate })
+    .onConflictDoNothing();
+  const data = await getPlanData(ctx, t.key);
+  if (!data) throw badState("The plan could not be started. Please try again.");
+  return data;
+}
+
+const checkSchema = z.object({
+  templateKey: z.string().max(60).default(DEFAULT_PLAN_KEY),
+  taskKey: z.string().min(1).max(80),
+  period: z.string().min(1).max(20),
+  checked: z.boolean(),
+});
+
+/** Tick or untick one item. Idempotent; only valid items can be stored. */
+export async function setCheck(ctx: Ctx, raw: unknown): Promise<void> {
+  const input = parseInput(checkSchema, raw);
+  const t = templateOf(input.templateKey);
+  const plan = await findPlan(ctx, t.key);
+  if (!plan) throw notFound("Your plan");
+  const problem = validateCheck(t, input.taskKey, input.period, todayOf(ctx));
+  if (problem) throw invalid(problem);
+
+  if (input.checked) {
+    await ctx.db.insert(s.planChecks).values({ planId: plan.id, taskKey: input.taskKey, periodKey: input.period }).onConflictDoNothing();
+  } else {
+    await ctx.db
+      .delete(s.planChecks)
+      .where(and(eq(s.planChecks.planId, plan.id), eq(s.planChecks.taskKey, input.taskKey), eq(s.planChecks.periodKey, input.period)));
+  }
+}
+
+const metricsSchema = z.object({
+  templateKey: z.string().max(60).default(DEFAULT_PLAN_KEY),
+  period: z.string().max(20),
+  weightKg: z.number().finite().min(30, "Weight must be between 30 and 250 kg.").max(250, "Weight must be between 30 and 250 kg.").nullable().optional(),
+  youtubeSubs: z.number().int("Use whole numbers for subscribers.").min(0).max(100_000_000).nullable().optional(),
+  instagramSubs: z.number().int("Use whole numbers for subscribers.").min(0).max(100_000_000).nullable().optional(),
+  longRunKm: z.number().finite().min(0).max(200, "That long run is too far to be true.").nullable().optional(),
+});
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Save the Sunday-review numbers for a week. Omitted fields are left alone; `null` clears a field. */
+export async function saveMetrics(ctx: Ctx, raw: unknown): Promise<void> {
+  const input = parseInput(metricsSchema, raw);
+  const t = templateOf(input.templateKey);
+  const plan = await findPlan(ctx, t.key);
+  if (!plan) throw notFound("Your plan");
+  const week = parseWeekPeriod(t, input.period);
+  if (week === null) throw invalid("Invalid week.");
+  if (compareDates(weekRange(t, week).start, todayOf(ctx)) > 0) throw invalid("That week hasn't started yet.");
+
+  const values: Partial<typeof s.planMetrics.$inferInsert> = {};
+  if (input.weightKg !== undefined) values.weightKg = input.weightKg === null ? null : round1(input.weightKg).toFixed(1);
+  if (input.youtubeSubs !== undefined) values.youtubeSubs = input.youtubeSubs;
+  if (input.instagramSubs !== undefined) values.instagramSubs = input.instagramSubs;
+  if (input.longRunKm !== undefined) values.longRunKm = input.longRunKm === null ? null : round1(input.longRunKm).toFixed(1);
+  if (Object.keys(values).length === 0) throw invalid("Enter at least one number.");
+
+  await ctx.db
+    .insert(s.planMetrics)
+    .values({ planId: plan.id, week, ...values })
+    .onConflictDoUpdate({ target: [s.planMetrics.planId, s.planMetrics.week], set: { ...values, updatedAt: new Date() } });
+}

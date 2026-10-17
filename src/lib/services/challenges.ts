@@ -106,7 +106,8 @@ export function buildDetail(b: Bundle, today: ISODate): ChallengeDetail {
     milestones: b.milestones.map((m) => toMilestoneView(m, progress.totalTarget)),
     achievements: toAchievementViews(b.achievements),
     shares: [],
-    logs: [...b.logs].sort((a, c) => c.occurredAt.getTime() - a.occurredAt.getTime()).map(toLogView),
+    // newest first; entries with the same timestamp keep the order they were created in
+    logs: [...b.logs].sort((a, c) => c.occurredAt.getTime() - a.occurredAt.getTime() || c.createdAt.getTime() - a.createdAt.getTime()).map(toLogView),
   };
 }
 

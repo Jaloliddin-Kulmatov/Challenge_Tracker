@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChallengeCard } from "@/components/challenge-card";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardTitle, EmptyState } from "@/components/ui/card";
@@ -7,13 +8,18 @@ import { requireCtx } from "@/lib/auth/session";
 import { formatDateLong } from "@/lib/core/dates";
 import { ACHIEVEMENT_LABEL } from "@/components/labels";
 import { getDashboard } from "@/lib/services/challenges";
+import { hasPlan } from "@/lib/services/plan";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Today" };
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ stay?: string }> }) {
+  const { stay } = await searchParams;
   const { ctx, user } = await requireCtx();
+  // People with a semester plan land on it; the "Today" tab (?stay=1) still opens this page.
+  const planStarted = await hasPlan(ctx);
+  if (planStarted && !stay) redirect("/plan");
   const data = await getDashboard(ctx);
   const active = data.challenges.filter((c) => ["running", "paused", "ended"].includes(c.phase));
   const upcoming = data.challenges.filter((c) => c.phase === "upcoming");
@@ -31,6 +37,15 @@ export default async function DashboardPage() {
           </p>
         )}
       </div>
+
+      <Link href="/plan" className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 hover:bg-surface-2">
+        <span className="text-2xl" aria-hidden>📅</span>
+        <span className="flex-1">
+          <span className="block font-semibold">{planStarted ? "Open my semester plan" : "Semester 4 plan · Malaysia"}</span>
+          <span className="block text-sm text-muted">{planStarted ? "Today's checklist, weekly goals and schedule." : "19 weeks, Oct 19 – Feb 28. Start tracking your daily goals."}</span>
+        </span>
+        <span className="text-sm font-semibold text-primary">{planStarted ? "Open" : "Start"}</span>
+      </Link>
 
       {data.challenges.length === 0 && (
         <EmptyState

@@ -12,11 +12,12 @@ export type ActionResult<T = undefined> =
  * Wraps every server action: authenticates, runs the use-case, and converts *any* failure into an
  * `{ ok: false }` result. The UI only ever shows success after receiving `{ ok: true }`.
  */
-export async function run<T>(fn: (ctx: Ctx) => Promise<T>): Promise<ActionResult<T>> {
+export async function run<T>(fn: (ctx: Ctx) => Promise<T>, opts: { revalidate?: boolean } = {}): Promise<ActionResult<T>> {
   try {
     const ctx = await requireActionCtx();
     const data = await fn(ctx);
-    revalidatePath("/", "layout");
+    // Screens that keep their own state (the plan checklist) skip this so a tick doesn't reload the whole page.
+    if (opts.revalidate !== false) revalidatePath("/", "layout");
     return { ok: true, data };
   } catch (err) {
     const e = toAppError(err);

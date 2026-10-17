@@ -67,7 +67,7 @@ export async function loadBundles(ex: Executor, challengeIds: string[]): Promise
     ex.select().from(s.challenges).where(inArray(s.challenges.id, challengeIds)),
     ex.select().from(s.challengeConfigurations).where(inArray(s.challengeConfigurations.challengeId, challengeIds)),
     ex.select().from(s.scheduledActivities).where(inArray(s.scheduledActivities.challengeId, challengeIds)).orderBy(asc(s.scheduledActivities.windowStart)),
-    ex.select().from(s.activityLogs).where(inArray(s.activityLogs.challengeId, challengeIds)).orderBy(asc(s.activityLogs.occurredAt)),
+    ex.select().from(s.activityLogs).where(inArray(s.activityLogs.challengeId, challengeIds)).orderBy(asc(s.activityLogs.occurredAt), asc(s.activityLogs.createdAt)),
     ex.select().from(s.challengePauses).where(inArray(s.challengePauses.challengeId, challengeIds)).orderBy(asc(s.challengePauses.startDate)),
     ex.select().from(s.milestones).where(inArray(s.milestones.challengeId, challengeIds)).orderBy(asc(s.milestones.createdAt)),
     ex.select().from(s.achievements).where(inArray(s.achievements.challengeId, challengeIds)).orderBy(asc(s.achievements.earnedAt)),

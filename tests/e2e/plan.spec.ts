@@ -188,6 +188,29 @@ test("a bad edit is refused with a message, and reset brings the original plan b
   await expect(today(page).getByText("0 / 10")).toBeVisible();
 });
 
+test("the evening reminder can be switched on and stays on; without an email provider the page says so", async ({ page }, info) => {
+  await signup(page, info.project.name);
+  await page.goto("/plan");
+  await page.getByRole("button", { name: "Start my plan" }).click();
+  await expect(page.getByRole("heading", { name: "Semester 4 · Malaysia", level: 1 })).toBeVisible();
+
+  const toggle = page.getByRole("switch", { name: /reminder every evening/ });
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByText(/Email sending isn't connected/)).toBeVisible(); // no RESEND_API_KEY in the test server
+  await toggle.check({ force: true });
+  await expect(page.getByText("I'll email you at 23:30.")).toBeVisible();
+  await expect(page.getByText(/Every day at 23:30 to plan-/)).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("switch", { name: /reminder every evening/ })).toBeChecked();
+  await expect(page.getByLabel("Reminder time")).toHaveValue("23:30");
+
+  await page.getByRole("switch", { name: /reminder every evening/ }).uncheck({ force: true });
+  await expect(page.getByText("Reminder turned off.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("switch", { name: /reminder every evening/ })).not.toBeChecked();
+});
+
 test("a tick that fails to save is undone and reported – never shown as done", async ({ page }, info) => {
   await signup(page, info.project.name);
   await page.goto("/plan");

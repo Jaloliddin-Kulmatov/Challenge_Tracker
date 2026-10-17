@@ -22,6 +22,26 @@ Vitest + Playwright.
 | Lifecycle | Edit duration, pause/resume (end date shifts), start in the future, finish early, results review, archive, delete |
 | Extras | Milestones (auto 25/50/75/100 % + custom), achievements, read-only share links (revocable/expiring), JSON data export, notification preferences |
 
+## Email reminders
+
+The plan page has a one-tap **Evening email reminder** (default 23:30, in your own time zone): it emails what is still
+unticked today, once a day, and stays quiet when everything is ticked.
+
+How it works: a scheduler calls `POST /api/cron/reminders` every 15 minutes with `Authorization: Bearer $CRON_SECRET`
+(`.github/workflows/reminders.yml`; Vercel Hobby crons only run once a day, GitHub Actions is free and every 15 minutes).
+The endpoint sends every reminder that is due (from the chosen time for 3 hours, so a late run still catches up) and is
+idempotent: `reminder_log` has one row per user per local day, claimed before sending.
+
+Set up once:
+
+1. Create a [Resend](https://resend.com) account and an API key. Without a verified domain, Resend only delivers to
+   your own account email, which is enough for a personal tracker.
+2. Vercel → Settings → Environment Variables: `RESEND_API_KEY`, `CRON_SECRET` (any long random string) and optionally
+   `EMAIL_FROM`; redeploy.
+3. GitHub → Settings → Secrets and variables → Actions: `CRON_SECRET` (same value) and `APP_URL`
+   (e.g. `https://challenge-tracker-bay.vercel.app`).
+4. On the plan page switch the reminder on and press **Send me a test email**.
+
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,

@@ -45,7 +45,7 @@ export function ProfileForm({ name: initialName, email, timezone: initialTz, zon
   );
 }
 
-export function NotificationsForm({ prefs }: { prefs: NotificationPrefs }) {
+export function NotificationsForm({ prefs, emailReady }: { prefs: NotificationPrefs; emailReady: boolean }) {
   const { exec, pending } = useRunner();
   const [p, setP] = React.useState(prefs);
   const [error, setError] = React.useState<string | null>(null);
@@ -59,7 +59,11 @@ export function NotificationsForm({ prefs }: { prefs: NotificationPrefs }) {
     <Card>
       <form onSubmit={save} className="space-y-4" noValidate>
         <CardTitle>Reminders</CardTitle>
-        <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">Your preferences are saved. Sending reminders needs an email or push provider to be connected by whoever hosts this app – see the README (“Notifications”). Until then nothing is sent.</p>
+        <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">
+          {emailReady
+            ? "Your preferences are saved. The evening reminder for your semester plan is switched on in the plan itself; email is connected on this server."
+            : "Your preferences are saved. Sending needs an email provider to be connected by whoever hosts this app – see the README (“Email reminders”). Until then nothing is sent."}
+        </p>
         <label className="flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" className="size-5" checked={p.dailyReminderEnabled} onChange={(e) => setP({ ...p, dailyReminderEnabled: e.target.checked })} /> Daily reminder</label>
         <Field label="Reminder time" htmlFor="n-time"><Input id="n-time" type="time" value={p.reminderTime} onChange={(e) => setP({ ...p, reminderTime: e.target.value })} /></Field>
         <label className="flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" className="size-5" checked={p.weeklySummaryEnabled} onChange={(e) => setP({ ...p, weeklySummaryEnabled: e.target.checked })} /> Weekly summary</label>

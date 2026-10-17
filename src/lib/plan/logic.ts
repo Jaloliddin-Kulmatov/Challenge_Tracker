@@ -84,7 +84,11 @@ function resolveDaily(t: PlanTemplate, task: DailyTask, date: ISODate): Resolved
   if (task.appendLongRunOn === wd) {
     const week = weekOf(t, date);
     const lr = week ? weekPlan(t, week)?.longRun : undefined;
-    if (lr) detail = `${detail ?? ""}${detail ? " · " : ""}${lr}`;
+    if (lr) {
+      // "long run 15 km" → "Long run · 15 km"; notes like "light runs only" replace the label ("Light runs only")
+      const km = /^long run (.+)$/i.exec(lr)?.[1];
+      detail = km ? `${detail ?? "Long run"} · ${km}` : lr.charAt(0).toUpperCase() + lr.slice(1);
+    }
   }
   return { taskKey: `daily:${task.key}`, title: task.title, time: task.time, detail };
 }

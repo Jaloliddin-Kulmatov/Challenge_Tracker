@@ -72,8 +72,8 @@ describe("daily tasks", () => {
 
   it("labels the workout and adds the long-run distance on Thursdays", () => {
     expect(dailyTasksFor(T, monday).find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Easy run");
-    expect(dailyTasksFor(T, thursday).find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Long run · long run 15 km");
-    expect(dailyTasksFor(T, "2027-01-21").find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Long run · light runs only");
+    expect(dailyTasksFor(T, thursday).find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Long run · 15 km");
+    expect(dailyTasksFor(T, "2027-01-21").find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Light runs only");
   });
 
   it("gives Mon–Sat nine tasks and Sunday a short rest-day list", () => {

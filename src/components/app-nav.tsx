@@ -1,18 +1,20 @@
 "use client";
-import { CalendarCheck, LayoutList, Plus, Settings } from "lucide-react";
+import { CalendarCheck, LayoutList, ListChecks, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/dashboard", label: "Today", icon: CalendarCheck },
+  { href: "/plan", label: "My plan", icon: ListChecks },
+  // "stay" stops the dashboard from redirecting people who have a plan straight back to it
+  { href: "/dashboard?stay=1", label: "Today", icon: CalendarCheck },
   { href: "/challenges", label: "Challenges", icon: LayoutList },
-  { href: "/challenges/new", label: "New", icon: Plus },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function isActive(path: string, href: string) {
-  if (href === "/challenges") return path === "/challenges" || (path.startsWith("/challenges/") && !path.startsWith("/challenges/new"));
+function isActive(path: string, rawHref: string) {
+  const href = rawHref.split("?")[0]!;
+  if (href === "/challenges") return path === "/challenges" || path.startsWith("/challenges/");
   return path === href || path.startsWith(href + "/");
 }
 

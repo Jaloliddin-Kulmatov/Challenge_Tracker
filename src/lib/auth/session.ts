@@ -39,8 +39,14 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
+/** Test-only clock override (E2E_FIXED_NOW=ISO timestamp) so browser tests are independent of today's date. */
+function currentTime(): Date {
+  const fixed = process.env.E2E_FIXED_NOW ? new Date(process.env.E2E_FIXED_NOW) : null;
+  return fixed && !Number.isNaN(fixed.getTime()) ? fixed : new Date();
+}
+
 export function ctxFor(user: SessionUser): Ctx {
-  return { db: getDb(), user: { id: user.id, timezone: user.timezone }, now: new Date() };
+  return { db: getDb(), user: { id: user.id, timezone: user.timezone }, now: currentTime() };
 }
 
 /** For server components. */

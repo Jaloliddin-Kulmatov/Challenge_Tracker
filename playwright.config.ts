@@ -16,7 +16,7 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: [["list"]],
-  use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure", screenshot: "only-on-failure", launchOptions: { executablePath, args: ["--no-sandbox"] } },
+  use: { baseURL: `http://localhost:${PORT}`, timezoneId: "UTC", trace: "retain-on-failure", screenshot: "only-on-failure", launchOptions: { executablePath, args: ["--no-sandbox"] } },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"], launchOptions: { executablePath, args: ["--no-sandbox"] } } },
     { name: "desktop", use: { ...devices["Desktop Chrome"], launchOptions: { executablePath, args: ["--no-sandbox"] } } },
@@ -28,6 +28,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}/manifest.webmanifest`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { DATABASE_URL: DB, BETTER_AUTH_URL: `http://localhost:${PORT}`, BETTER_AUTH_SECRET: "e2e-only-secret-0123456789abcdef0123456789", NODE_ENV: "production", AUTH_RATE_LIMIT: "off" },
+    env: { DATABASE_URL: DB, BETTER_AUTH_URL: `http://localhost:${PORT}`, BETTER_AUTH_SECRET: "e2e-only-secret-0123456789abcdef0123456789", NODE_ENV: "production", AUTH_RATE_LIMIT: "off",
+      // Fixed clock (a Wednesday in week 1 of the semester plan) so the browser tests never depend on the real date.
+      E2E_FIXED_NOW: "2026-10-21T10:00:00Z" },
   },
 });

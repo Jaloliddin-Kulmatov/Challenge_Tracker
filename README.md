@@ -22,6 +22,19 @@ Vitest + Playwright.
 | Lifecycle | Edit duration, pause/resume (end date shifts), start in the future, finish early, results review, archive, delete |
 | Extras | Milestones (auto 25/50/75/100 % + custom), achievements, read-only share links (revocable/expiring), JSON data export, notification preferences |
 
+## Semester plan (checklist tracker)
+
+`/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,
+today's checklist (9 things Mon–Sat, a short rest-day list on Sunday), monthly goals (this month + next), a card for each of
+the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
+
+* The plan's *content* lives in code (`src/lib/plan/malaysia-semester4.ts`); the database only stores ticks
+  (`plan_checks`) and the Sunday numbers (`plan_metrics`), one `plans` row per user.
+* Rules (`src/lib/plan/logic.ts`): daily ticks only for today or earlier days and only on days a task applies; weekly
+  goals only once the week has started; week-specific tasks, monthly results and goals may be ticked any time.
+* A failed save is undone on screen and reported – a tick never looks done unless the server stored it.
+* To add another plan, add a template next to the Malaysia one and register it in `src/lib/plan/templates.ts`.
+
 ## Quick start (local)
 
 Requirements: Node ≥ 20.9, PostgreSQL ≥ 14 (Docker is the easiest way).

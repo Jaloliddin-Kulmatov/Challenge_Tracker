@@ -11,6 +11,7 @@ export const MALAYSIA_SEM4: PlanTemplate = {
   subtitle: "19 weeks, Oct 19 – Feb 28. Grades come first. Sunday is rest day.",
   startDate: "2026-10-19",
   endDate: "2027-02-28",
+  weightGoalKg: 65,
   intro: "Grades come first. Sunday is rest day.",
 
   goals: [
@@ -30,20 +31,22 @@ export const MALAYSIA_SEM4: PlanTemplate = {
   dailyTasks: [
     {
       key: "exercise",
+      habit: "Exercise sessions",
       title: "Exercise",
       time: "19:00",
       weekdays: [1, 3, 4, 6],
       detailByWeekday: { 1: "Easy run", 3: "Strength", 4: "Long run", 6: "Gym" },
       appendLongRunOn: 4,
     },
-    { key: "nutrition", title: "No soda · protein + creatine + calcium with breakfast", weekdays: [1, 2, 3, 4, 5, 6, 7] },
-    { key: "dl", title: "DeepLearning.AI course — 60–90 min", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "german", title: "German — 45 min", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "review", title: "Review today's lectures — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "projects", title: "Projects — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "newperson", title: "Talk to 1 new person", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "post", title: "Daily post on LinkedIn or Instagram", weekdays: [1, 2, 3, 4, 5, 6] },
-    { key: "sleep", title: "Sleep by 23:30", time: "23:30", weekdays: [1, 2, 3, 4, 5, 6, 7] },
+    { key: "nutrition", habit: "No-soda days", title: "No soda · protein + creatine + calcium with breakfast", weekdays: [1, 2, 3, 4, 5, 6, 7] },
+    { key: "dl", habit: "DeepLearning.AI days", title: "DeepLearning.AI course — 60–90 min", weekdays: [1, 2, 3, 4, 5, 6] },
+    { key: "german", habit: "German days", title: "German — 45 min", weekdays: [1, 2, 3, 4, 5, 6, 7] },
+    { key: "reading", habit: "Reading days", title: "Read your book — 30 min", weekdays: [1, 2, 3, 4, 5, 6, 7] },
+    { key: "review", habit: "Lecture reviews", title: "Review today's lectures — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
+    { key: "projects", habit: "Project days", title: "Projects — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
+    { key: "newperson", habit: "New people met", title: "Talk to 1 new person", weekdays: [1, 2, 3, 4, 5, 6] },
+    { key: "post", habit: "Posts", title: "Daily post on LinkedIn or Instagram", weekdays: [1, 2, 3, 4, 5, 6] },
+    { key: "sleep", habit: "Sleep by 23:30", title: "Sleep by 23:30", time: "23:30", weekdays: [1, 2, 3, 4, 5, 6, 7] },
     { key: "weekly-review", title: "30-min review: log the numbers, plan next week", weekdays: [7] },
   ],
 
@@ -56,6 +59,12 @@ export const MALAYSIA_SEM4: PlanTemplate = {
     { key: "studies", area: "Studies", target: "Assignments done 2 days early" },
     { key: "projects", area: "Projects", target: "1 small result" },
     { key: "social", area: "Social", target: "1 event or club" },
+  ],
+
+  books: [
+    { id: "b1", title: "Book 1" },
+    { id: "b2", title: "Book 2" },
+    { id: "b3", title: "Book 3" },
   ],
 
   schedule: [
@@ -115,7 +124,7 @@ export const MALAYSIA_SEM4: PlanTemplate = {
 
   months: [
     {
-      key: "oct", name: "October", year: 2026, month: 10, focus: "Applications", youtube: 100, instagram: 100, longRunKm: 15,
+      key: "oct", name: "October", year: 2026, month: 10, focus: "Applications", youtube: 100, instagram: 100, longRunKm: 15, weightKg: null, books: 0,
       results: [
         { id: "r1", text: "DAAD sent" },
         { id: "r2", text: "Linear Algebra started" },
@@ -123,7 +132,7 @@ export const MALAYSIA_SEM4: PlanTemplate = {
       ],
     },
     {
-      key: "nov", name: "November", year: 2026, month: 11, focus: "German + courses", youtube: 300, instagram: 300, longRunKm: 17,
+      key: "nov", name: "November", year: 2026, month: 11, focus: "German + courses", youtube: 300, instagram: 300, longRunKm: 17, weightKg: null, books: 1,
       results: [
         { id: "r1", text: "Linear Algebra + Calculus done" },
         { id: "r2", text: "Goethe registered" },
@@ -131,18 +140,18 @@ export const MALAYSIA_SEM4: PlanTemplate = {
       ],
     },
     {
-      key: "dec", name: "December", year: 2026, month: 12, focus: "Courses + travel", youtube: 550, instagram: 550, longRunKm: 20,
+      key: "dec", name: "December", year: 2026, month: 12, focus: "Courses + travel", youtube: 550, instagram: 550, longRunKm: 20, weightKg: null, books: 1,
       results: [
         { id: "r1", text: "Math for ML certificate" },
         { id: "r2", text: "Trip: Singapore" },
       ],
     },
     {
-      key: "jan", name: "January", year: 2027, month: 1, focus: "Final exams", youtube: 750, instagram: 750, longRunKm: 21,
+      key: "jan", name: "January", year: 2027, month: 1, focus: "Final exams", youtube: 750, instagram: 750, longRunKm: 21, weightKg: null, books: 2,
       results: [{ id: "r1", text: "A+ in finals" }],
     },
     {
-      key: "feb", name: "February", year: 2027, month: 2, focus: "Exams + wrap-up", youtube: 1000, instagram: 1000, longRunKm: 25,
+      key: "feb", name: "February", year: 2027, month: 2, focus: "Exams + wrap-up", youtube: 1000, instagram: 1000, longRunKm: 25, weightKg: null, books: 3,
       results: [
         { id: "r1", text: "Goethe B2" },
         { id: "r2", text: "IELTS" },

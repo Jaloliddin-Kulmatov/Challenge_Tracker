@@ -8,8 +8,9 @@
  *   weekly:<goal>          period "W<n>"          recurring weekly goals (week must have started)
  *   wtask:<w3t1>           period "W<n>"          tasks specific to one week (may be ticked early)
  *   mres:<month>:<id>      period "once"          monthly key results
+ *   book:<id>              period "once"          books to finish
  */
-import { addDays, compareDates, diffDays, isoWeekday, isValidISODate, minDate, type ISODate } from "@/lib/core/dates";
+import { addDays, compareDates, diffDays, isoWeekday, isValidISODate, maxDate, minDate, type ISODate } from "@/lib/core/dates";
 import type { DailyTask, MonthPlan, PlanTemplate, WeekPlan } from "./types";
 
 export type CheckSet = ReadonlySet<string>;
@@ -110,6 +111,9 @@ export function validateCheck(t: PlanTemplate, taskKey: string, period: string, 
     case "goal":
       if (!t.goals.some((g) => g.key === id)) return "Unknown goal.";
       return period === "once" ? null : "Invalid period.";
+    case "book":
+      if (!t.books.some((b) => b.id === id)) return "Unknown book.";
+      return period === "once" ? null : "Invalid period.";
     case "daily": {
       if (!t.dailyTasks.some((d) => d.key === id)) return "Unknown task.";
       if (!isValidISODate(period)) return "Invalid date.";
@@ -186,6 +190,10 @@ export function goalsCount(t: PlanTemplate, checks: CheckSet): Count {
   return count(checks, t.goals.map((g) => checkKey(`goal:${g.key}`, "once")));
 }
 
+export function booksCount(t: PlanTemplate, checks: CheckSet): Count {
+  return count(checks, t.books.map((b) => checkKey(`book:${b.id}`, "once")));
+}
+
 export function monthCount(t: PlanTemplate, checks: CheckSet, month: MonthPlan): Count {
   return count(checks, month.results.map((r) => checkKey(`mres:${month.key}:${r.id}`, "once")));
 }
@@ -199,4 +207,107 @@ export function perfectDays(t: PlanTemplate, checks: CheckSet, today: ISODate): 
     if (c.total > 0 && c.done === c.total) n += 1;
   }
   return n;
+}
+
+// ---------------------------------------------------------------------------
+// Monthly numbers
+// ---------------------------------------------------------------------------
+
+/** The numbers logged in a week's Sunday review (a subset of `MetricView`, so the logic stays free of the database). */
+export interface WeekNumbers {
+  week: number;
+  weightKg: number | null;
+  youtubeSubs: number | null;
+  instagramSubs: number | null;
+  longRunKm: number | null;
+}
+
+/** First and last day of the month, clipped to the plan. */
+export function monthRange(t: PlanTemplate, month: MonthPlan): { start: ISODate; end: ISODate } {
+  const mm = String(month.month).padStart(2, "0");
+  const first = `${month.year}-${mm}-01`;
+  const last = addDays(month.month === 12 ? `${month.year + 1}-01-01` : `${month.year}-${String(month.month + 1).padStart(2, "0")}-01`, -1);
+  return { start: maxDate(first, t.startDate), end: minDate(last, t.endDate) };
+}
+
+/** A week counts towards the month its last day is in (that is when its Sunday review is done). */
+export function monthKeyOfWeek(t: PlanTemplate, n: number): string {
+  return monthFor(t, weekRange(t, n).end).key;
+}
+
+/** The first logged weight, which the straight-line weight path starts from. */
+export function startWeight(metrics: readonly WeekNumbers[]): number | null {
+  return [...metrics].sort((a, b) => a.week - b.week).find((m) => m.weightKg !== null)?.weightKg ?? null;
+}
+
+/** Target weight at the end of a month: the month's own target, else a straight line from the first logged weight to the goal. */
+export function weightTarget(t: PlanTemplate, month: MonthPlan, metrics: readonly WeekNumbers[]): number | null {
+  if (month.weightKg !== null) return month.weightKg;
+  const from = startWeight(metrics);
+  if (from === null) return null;
+  const first = [...metrics].sort((a, b) => a.week - b.week).find((m) => m.weightKg !== null)!;
+  const startDay = weekRange(t, first.week).start;
+  const span = diffDays(startDay, t.endDate);
+  if (span <= 0) return t.weightGoalKg;
+  const done = Math.min(span, Math.max(0, diffDays(startDay, monthRange(t, month).end)));
+  return Math.round((from + ((t.weightGoalKg - from) * done) / span) * 10) / 10;
+}
+
+export interface Target {
+  /** What the plan asks for by the end of the month (null when not computable yet). */
+  target: number | null;
+  /** What you have logged so far (null when nothing is logged). */
+  actual: number | null;
+}
+
+export interface HabitStat {
+  label: string;
+  done: number;
+  total: number;
+}
+
+export interface MonthStats {
+  youtube: Target;
+  instagram: Target;
+  weight: Target;
+  longRun: Target;
+  books: Target;
+  habits: HabitStat[];
+}
+
+const lastOf = (values: (number | null)[]) => [...values].reverse().find((v): v is number => v !== null) ?? null;
+
+/**
+ * Where you stand in a month. Subscribers and weight are "latest logged by the end of the month";
+ * the long run is the best one logged in the month; books is how many are ticked (only meaningful from the month on).
+ */
+export function monthStats(t: PlanTemplate, month: MonthPlan, metrics: readonly WeekNumbers[], checks: CheckSet, today: ISODate): MonthStats {
+  const sorted = [...metrics].sort((a, b) => a.week - b.week);
+  const upTo = sorted.filter((m) => m.week <= t.weeks.length && compareDates(weekRange(t, m.week).end, monthRange(t, month).end) <= 0);
+  const inMonth = sorted.filter((m) => m.week <= t.weeks.length && monthKeyOfWeek(t, m.week) === month.key);
+  const { start, end } = monthRange(t, month);
+  const last = minDate(end, today);
+
+  const habits: HabitStat[] = [];
+  for (const task of t.dailyTasks) {
+    if (!task.habit) continue;
+    let done = 0;
+    let total = 0;
+    for (let d = start; compareDates(d, last) <= 0; d = addDays(d, 1)) {
+      if (!task.weekdays.includes(isoWeekday(d))) continue;
+      total += 1;
+      if (checks.has(checkKey(`daily:${task.key}`, d))) done += 1;
+    }
+    if (total > 0) habits.push({ label: task.habit, done, total });
+  }
+
+  const bestRun = inMonth.reduce<number | null>((m, x) => (x.longRunKm !== null && (m === null || x.longRunKm > m) ? x.longRunKm : m), null);
+  return {
+    youtube: { target: month.youtube, actual: lastOf(upTo.map((m) => m.youtubeSubs)) },
+    instagram: { target: month.instagram, actual: lastOf(upTo.map((m) => m.instagramSubs)) },
+    weight: { target: weightTarget(t, month, metrics), actual: lastOf(upTo.map((m) => m.weightKg)) },
+    longRun: { target: month.longRunKm, actual: bestRun },
+    books: { target: month.books, actual: booksCount(t, checks).done },
+    habits,
+  };
 }

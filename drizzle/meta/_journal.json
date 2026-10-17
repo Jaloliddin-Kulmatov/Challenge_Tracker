@@ -15,6 +15,13 @@
       "when": 1792213627709,
       "tag": "0001_semester_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792224221299,
+      "tag": "0002_plan_content",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import * as s from "@/lib/db/schema";
 import { AppError } from "@/lib/services/errors";
-import { getPlanData, hasPlan, saveMetrics, setCheck, startPlan } from "@/lib/services/plan";
+import { contentOf } from "@/lib/plan/content";
+import { MALAYSIA_SEM4 } from "@/lib/plan/malaysia-semester4";
+import { getPlanData, hasPlan, resetPlanContent, saveMetrics, savePlanContent, setCheck, startPlan } from "@/lib/services/plan";
 import { at, client, db, makeUser } from "./helpers";
 
 afterAll(async () => {
@@ -114,6 +116,62 @@ describe("semester plan", () => {
     await rejects(saveMetrics(ctx, { period: "W3", weightKg: 70 }), "VALIDATION", /hasn't started/);
     await rejects(saveMetrics(ctx, { period: "W99", weightKg: 70 }), "VALIDATION");
     expect((await getPlanData(ctx))!.metrics).toHaveLength(1);
+  });
+
+  it("lets the user edit every part of the plan, and ticks follow their tasks", async () => {
+    const u = await makeUser();
+    const ctx = at(u, WED);
+    await startPlan(ctx);
+    expect((await getPlanData(ctx))!.edited).toBe(false);
+    await setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: true });
+    await setCheck(ctx, { taskKey: "book:b1", period: "once", checked: true });
+
+    const c = structuredClone(contentOf(MALAYSIA_SEM4));
+    c.dailyTasks = c.dailyTasks.filter((d) => d.key !== "post");
+    c.dailyTasks.push({ key: "walk", title: "Walk 20 min", weekdays: [1, 2, 3, 4, 5, 6, 7] });
+    c.books[0]!.title = "Deep Work";
+    c.goals.push({ key: "sleep8", area: "Sleep", target: "8 hours" });
+    c.weeks[0]!.tasks.push({ id: "w1t777", text: "Buy a SIM card" });
+    c.months[0]!.books = 1;
+    await savePlanContent(ctx, { content: c });
+
+    const d = (await getPlanData(ctx))!;
+    expect(d.edited).toBe(true);
+    expect(d.template.books[0]!.title).toBe("Deep Work");
+    expect(d.template.months[0]!.books).toBe(1);
+    expect(d.checks).toContain("book:b1|once"); // the ticked book keeps its tick after the rename
+
+    await setCheck(ctx, { taskKey: "daily:walk", period: "2026-10-21", checked: true });
+    await setCheck(ctx, { taskKey: "goal:sleep8", period: "once", checked: true });
+    await setCheck(ctx, { taskKey: "wtask:w1t777", period: "W1", checked: true });
+    await rejects(setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: false }), "VALIDATION", /Unknown/); // removed
+
+    await resetPlanContent(ctx);
+    const r = (await getPlanData(ctx))!;
+    expect(r.edited).toBe(false);
+    expect(r.template.books[0]!.title).toBe("Book 1");
+    await setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: false }); // back again
+    await rejects(setCheck(ctx, { taskKey: "daily:walk", period: "2026-10-21", checked: true }), "VALIDATION", /Unknown/);
+  });
+
+  it("rejects invalid edits, edits to a plan that doesn't exist, and other people's plans", async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const content = contentOf(MALAYSIA_SEM4);
+    await rejects(savePlanContent(at(a, WED), { content }), "NOT_FOUND"); // not started
+    await startPlan(at(a, WED));
+    await rejects(savePlanContent(at(a, WED), { content: { ...content, goals: [{ key: "x", area: "", target: "y" }] } }), "VALIDATION", /can't be empty/);
+    await rejects(savePlanContent(at(a, WED), { content: { ...content, months: content.months.slice(1) } }), "VALIDATION");
+    await rejects(savePlanContent(at(a, WED), { content: null }), "VALIDATION");
+    expect((await getPlanData(at(a, WED)))!.edited).toBe(false);
+
+    await startPlan(at(b, WED));
+    const mine = structuredClone(content);
+    mine.goals[0]!.area = "Only mine";
+    await savePlanContent(at(a, WED), { content: mine });
+    expect((await getPlanData(at(b, WED)))!.template.goals[0]!.area).toBe("Grades");
+    await resetPlanContent(at(b, WED));
+    expect((await getPlanData(at(a, WED)))!.template.goals[0]!.area).toBe("Only mine");
   });
 
   it("removes everything when the user is deleted", async () => {

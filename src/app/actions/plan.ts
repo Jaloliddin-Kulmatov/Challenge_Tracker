@@ -6,3 +6,5 @@ export const startPlanAction = async (templateKey?: string) => run((ctx) => plan
 // Ticks and numbers are kept in client state, so these don't revalidate the page.
 export const setCheckAction = async (raw: unknown) => run((ctx) => plan.setCheck(ctx, raw), { revalidate: false });
 export const saveMetricsAction = async (raw: unknown) => run((ctx) => plan.saveMetrics(ctx, raw), { revalidate: false });
+export const savePlanContentAction = async (raw: unknown) => run((ctx) => plan.savePlanContent(ctx, raw));
+export const resetPlanContentAction = async (templateKey?: string) => run((ctx) => plan.resetPlanContent(ctx, templateKey));

@@ -2,8 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import * as s from "@/lib/db/schema";
 import { compareDates, type ISODate } from "@/lib/core/dates";
+import { applyContent, parsePlanContent } from "@/lib/plan/content";
 import { parseWeekPeriod, validateCheck, weekRange, checkKey } from "@/lib/plan/logic";
 import { DEFAULT_PLAN_KEY, getTemplate } from "@/lib/plan/templates";
+import type { PlanTemplate } from "@/lib/plan/types";
 import { parseInput } from "@/lib/validation";
 import type { Ctx } from "./context";
 import { todayOf } from "./context";
@@ -19,6 +21,10 @@ export interface MetricView {
 
 export interface PlanData {
   templateKey: string;
+  /** The plan as this user sees it: the default template with their edits laid over it. */
+  template: PlanTemplate;
+  /** True once the user has changed anything. */
+  edited: boolean;
   startDate: ISODate;
   endDate: ISODate;
   /** Every ticked item as "taskKey|period". */
@@ -26,7 +32,7 @@ export interface PlanData {
   metrics: MetricView[];
 }
 
-const templateOf = (key: string) => {
+const baseOf = (key: string) => {
   const t = getTemplate(key);
   if (!t) throw invalid("Unknown plan.");
   return t;
@@ -57,6 +63,8 @@ export async function getPlanData(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Pro
   ]);
   return {
     templateKey: plan.templateKey,
+    template: applyContent(baseOf(plan.templateKey), plan.content),
+    edited: plan.content !== null,
     startDate: plan.startDate,
     endDate: plan.endDate,
     checks: checks.map((c) => checkKey(c.taskKey, c.periodKey)),
@@ -68,7 +76,7 @@ export async function getPlanData(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Pro
 
 /** Start the plan (idempotent: starting twice returns the same plan). */
 export async function startPlan(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Promise<PlanData> {
-  const t = templateOf(templateKey);
+  const t = baseOf(templateKey);
   await ctx.db
     .insert(s.plans)
     .values({ ownerId: ctx.user.id, templateKey: t.key, startDate: t.startDate, endDate: t.endDate })
@@ -88,9 +96,10 @@ const checkSchema = z.object({
 /** Tick or untick one item. Idempotent; only valid items can be stored. */
 export async function setCheck(ctx: Ctx, raw: unknown): Promise<void> {
   const input = parseInput(checkSchema, raw);
-  const t = templateOf(input.templateKey);
-  const plan = await findPlan(ctx, t.key);
+  const base = baseOf(input.templateKey);
+  const plan = await findPlan(ctx, base.key);
   if (!plan) throw notFound("Your plan");
+  const t = applyContent(base, plan.content);
   const problem = validateCheck(t, input.taskKey, input.period, todayOf(ctx));
   if (problem) throw invalid(problem);
 
@@ -117,9 +126,10 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 /** Save the Sunday-review numbers for a week. Omitted fields are left alone; `null` clears a field. */
 export async function saveMetrics(ctx: Ctx, raw: unknown): Promise<void> {
   const input = parseInput(metricsSchema, raw);
-  const t = templateOf(input.templateKey);
-  const plan = await findPlan(ctx, t.key);
+  const base = baseOf(input.templateKey);
+  const plan = await findPlan(ctx, base.key);
   if (!plan) throw notFound("Your plan");
+  const t = applyContent(base, plan.content);
   const week = parseWeekPeriod(t, input.period);
   if (week === null) throw invalid("Invalid week.");
   if (compareDates(weekRange(t, week).start, todayOf(ctx)) > 0) throw invalid("That week hasn't started yet.");
@@ -135,4 +145,25 @@ export async function saveMetrics(ctx: Ctx, raw: unknown): Promise<void> {
     .insert(s.planMetrics)
     .values({ planId: plan.id, week, ...values })
     .onConflictDoUpdate({ target: [s.planMetrics.planId, s.planMetrics.week], set: { ...values, updatedAt: new Date() } });
+}
+
+const contentInput = z.object({ templateKey: z.string().max(60).default(DEFAULT_PLAN_KEY), content: z.unknown() });
+
+/** Replace the user's edits (goals, tasks, targets…). Ticks of removed items stay stored but no longer count. */
+export async function savePlanContent(ctx: Ctx, raw: unknown): Promise<void> {
+  const input = parseInput(contentInput, raw);
+  const base = baseOf(input.templateKey);
+  const plan = await findPlan(ctx, base.key);
+  if (!plan) throw notFound("Your plan");
+  const parsed = parsePlanContent(input.content, base);
+  if (!parsed.ok) throw invalid(parsed.error);
+  await ctx.db.update(s.plans).set({ content: parsed.content }).where(and(eq(s.plans.id, plan.id), eq(s.plans.ownerId, ctx.user.id)));
+}
+
+/** Go back to the default plan (ticks and numbers are kept). */
+export async function resetPlanContent(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Promise<void> {
+  const base = baseOf(templateKey);
+  const plan = await findPlan(ctx, base.key);
+  if (!plan) throw notFound("Your plan");
+  await ctx.db.update(s.plans).set({ content: null }).where(and(eq(s.plans.id, plan.id), eq(s.plans.ownerId, ctx.user.id)));
 }

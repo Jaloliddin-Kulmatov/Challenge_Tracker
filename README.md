@@ -22,6 +22,17 @@ Vitest + Playwright.
 | Lifecycle | Edit duration, pause/resume (end date shifts), start in the future, finish early, results review, archive, delete |
 | Extras | Milestones (auto 25/50/75/100 % + custom), achievements, read-only share links (revocable/expiring), JSON data export, notification preferences |
 
+## Install on your phone (PWA)
+
+The app is installable: `src/app/manifest.ts` (standalone, opens on `/plan`, themed icons incl. a maskable one in
+`public/icons/`), a small service worker (`public/sw.js`: caches only static build files, never pages or API data, and
+shows `public/offline.html` when the connection drops) and an install prompt (`src/components/pwa.tsx`).
+
+* **Android / Chrome**: an *Install* banner appears, or Settings → *Install on your phone* → *Add to home screen*.
+* **iPhone / iPad**: open the site in **Safari** → Share → *Add to Home Screen* (the app shows these steps; Apple gives
+  websites no install button).
+* Needs HTTPS, which Vercel provides. The service worker only registers in production builds.
+
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,

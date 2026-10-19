@@ -20,6 +20,12 @@ export async function updateProfile(ctx: Ctx, raw: unknown) {
   if (res.length === 0) throw notFound("Your account");
 }
 
+export async function getUserEmail(ctx: Ctx): Promise<string> {
+  const [row] = await ctx.db.select({ email: s.user.email }).from(s.user).where(eq(s.user.id, ctx.user.id)).limit(1);
+  if (!row) throw notFound("Your account");
+  return row.email;
+}
+
 export interface NotificationPrefs {
   dailyReminderEnabled: boolean;
   reminderTime: string;

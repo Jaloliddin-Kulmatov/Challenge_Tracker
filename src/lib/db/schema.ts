@@ -384,6 +384,23 @@ export const planMetrics = pgTable(
   ],
 );
 
+/**
+ * One row per reminder actually sent (or being sent): the unique key is what makes the 15-minute cron safe –
+ * whoever inserts the row first sends the email, everyone else sees a conflict and skips.
+ */
+export const reminderLog = pgTable(
+  "reminder_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    kind: text().notNull(),
+    /** The user's local calendar date the reminder is for. */
+    localDate: day("local_date").notNull(),
+    sentAt: ts("sent_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("reminder_log_uq").on(t.userId, t.kind, t.localDate)],
+);
+
 export type PlanRow = typeof plans.$inferSelect;
 export type PlanMetricRow = typeof planMetrics.$inferSelect;
 export type UserRow = typeof user.$inferSelect;

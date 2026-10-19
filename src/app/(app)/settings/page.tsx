@@ -1,3 +1,4 @@
+import { emailConfigured } from "@/lib/email";
 import type { Metadata } from "next";
 import { AccountActions, NotificationsForm, ProfileForm } from "@/components/settings-forms";
 import { requireCtx } from "@/lib/auth/session";
@@ -14,7 +15,7 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-5">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
       <ProfileForm name={user.name} email={user.email} timezone={user.timezone} zones={zones} />
-      <NotificationsForm prefs={prefs} />
+      <NotificationsForm prefs={prefs} emailReady={emailConfigured()} />
       <AccountActions />
     </div>
   );

@@ -42,10 +42,21 @@ Set up once:
    (e.g. `https://challenge-tracker-bay.vercel.app`).
 4. On the plan page switch the reminder on and press **Send me a test email**.
 
+## Install on your phone (PWA)
+
+The app is installable: `src/app/manifest.ts` (standalone, opens on `/plan`, themed icons incl. a maskable one in
+`public/icons/`), a small service worker (`public/sw.js`: caches only static build files, never pages or API data, and
+shows `public/offline.html` when the connection drops) and an install prompt (`src/components/pwa.tsx`).
+
+* **Android / Chrome**: an *Install* banner appears, or Settings → *Install on your phone* → *Add to home screen*.
+* **iPhone / iPad**: open the site in **Safari** → Share → *Add to Home Screen* (the app shows these steps; Apple gives
+  websites no install button).
+* Needs HTTPS, which Vercel provides. The service worker only registers in production builds.
+
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,
-today's checklist (9 things Mon–Sat, a short rest-day list on Sunday), monthly goals (this month + next), a card for each of
+today's checklist (10 things Mon–Sat, a short rest-day list on Sunday), monthly goals (this month + next), a card for each of
 the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
 
 * The plan's *default content* lives in code (`src/lib/plan/malaysia-semester4.ts`). Everything the user edits on

@@ -1,6 +1,7 @@
 import { emailConfigured } from "@/lib/email";
 import type { Metadata } from "next";
 import { AccountActions, NotificationsForm, ProfileForm } from "@/components/settings-forms";
+import { InstallCard } from "@/components/pwa";
 import { requireCtx } from "@/lib/auth/session";
 import { getNotificationPrefs } from "@/lib/services/profile";
 
@@ -14,6 +15,7 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+      <InstallCard />
       <ProfileForm name={user.name} email={user.email} timezone={user.timezone} zones={zones} />
       <NotificationsForm prefs={prefs} emailReady={emailConfigured()} />
       <AccountActions />

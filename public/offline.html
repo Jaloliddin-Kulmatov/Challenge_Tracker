@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f7a5c">
+<title>Offline · Challenge Tracker</title>
+<style>
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; font-family: system-ui, sans-serif; background: #f7f7f5; color: #1a1a19; text-align: center; }
+  main { max-width: 360px; }
+  .logo { width: 64px; height: 64px; margin: 0 auto 16px; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { color: #5f5f5a; line-height: 1.5; margin: 0 0 20px; }
+  button { min-height: 48px; padding: 0 24px; border: 0; border-radius: 12px; background: #0f7a5c; color: #fff; font-size: 16px; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { body { background: #121211; color: #f2f2ef; } p { color: #a5a5a0; } }
+</style>
+</head>
+<body>
+<main>
+  <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#0f7a5c"/><path d="M18 34l9 9 19-22" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>You're offline</h1>
+  <p>Your ticks are saved on the server, so nothing is lost. Reconnect and try again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

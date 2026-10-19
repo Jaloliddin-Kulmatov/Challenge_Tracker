@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import Link from "next/link";
 import { BottomNav, TopNav } from "@/components/app-nav";
+import { InstallBanner } from "@/components/pwa";
 import { requireUser } from "@/lib/auth/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -22,7 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         )}
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-5">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-5">
+        <InstallBanner />
+        {children}
+      </main>
       <BottomNav />
     </div>
   );

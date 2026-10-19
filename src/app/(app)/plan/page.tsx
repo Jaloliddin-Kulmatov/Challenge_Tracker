@@ -22,5 +22,5 @@ export default async function PlanPage() {
       />
     );
   }
-  return <PlanView templateKey={data.templateKey} today={todayOf(ctx)} initialChecks={data.checks} initialMetrics={data.metrics} />;
+  return <PlanView template={data.template} today={todayOf(ctx)} initialChecks={data.checks} initialMetrics={data.metrics} />;
 }

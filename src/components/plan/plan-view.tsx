@@ -1,5 +1,6 @@
 "use client";
-import { ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Flame } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Flame, Pencil } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 import { saveMetricsAction, setCheckAction } from "@/app/actions/plan";
 import { Tick } from "@/components/plan/tick";
@@ -10,16 +11,15 @@ import { useToast } from "@/components/ui/toast";
 import { addDays, compareDates, diffDays, formatDateLong, formatDateShort, isoWeekday, minDate, type ISODate } from "@/lib/core/dates";
 import { formatNumber, WEEKDAY_LONG } from "@/lib/core/format";
 import {
-  checkKey, currentWeek, dailyTasksFor, dayCount, dayNumber, goalsCount, monthCount, monthFor, nextMonth, perfectDays,
-  planPhase, weekCount, weekOf, weekPlan, weekRange, type Count,
+  booksCount, checkKey, currentWeek, dailyTasksFor, dayCount, dayNumber, goalsCount, monthCount, monthFor, monthStats, nextMonth,
+  perfectDays, planPhase, weekCount, weekOf, weekPlan, weekRange, type Count, type Target,
 } from "@/lib/plan/logic";
-import { getTemplate } from "@/lib/plan/templates";
 import type { MonthPlan, PlanTemplate } from "@/lib/plan/types";
 import type { MetricView } from "@/lib/services/plan";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  templateKey: string;
+  template: PlanTemplate;
   today: ISODate;
   initialChecks: string[];
   initialMetrics: MetricView[];
@@ -27,8 +27,8 @@ interface Props {
 
 const pct = (c: Count) => (c.total === 0 ? 0 : (c.done / c.total) * 100);
 
-export function PlanView({ templateKey, today, initialChecks, initialMetrics }: Props) {
-  const t = getTemplate(templateKey) as PlanTemplate;
+export function PlanView({ template: t, today, initialChecks, initialMetrics }: Props) {
+  const templateKey = t.key;
   const toast = useToast();
   const [checks, setChecks] = React.useState<Set<string>>(() => new Set(initialChecks));
   const [busy, setBusy] = React.useState<Set<string>>(() => new Set());
@@ -91,9 +91,14 @@ export function PlanView({ templateKey, today, initialChecks, initialMetrics }: 
     <div className="space-y-6">
       {/* ---------------------------------------------------------------- header */}
       <header className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
-          <p className="text-sm text-muted">{t.subtitle}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
+            <p className="text-sm text-muted">{t.subtitle}</p>
+          </div>
+          <Link href="/plan/edit" className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-surface-2 px-3.5 text-sm font-semibold text-muted hover:bg-border">
+            <Pencil className="size-4" aria-hidden /> Edit
+          </Link>
         </div>
         {phase === "upcoming" && (
           <p role="status" className="rounded-2xl bg-accent/10 px-4 py-3 text-sm">
@@ -135,9 +140,9 @@ export function PlanView({ templateKey, today, initialChecks, initialMetrics }: 
       {/* ----------------------------------------------------------- 3. months */}
       <section id="month" aria-labelledby="month-h" className="scroll-mt-28 space-y-3">
         <h2 id="month-h" className="text-lg font-semibold">Monthly goals</h2>
-        <MonthCard t={t} month={thisMonth} label="This month" checks={checks} tickProps={tickProps} />
-        {upcomingMonth && <MonthCard t={t} month={upcomingMonth} label="Next month" checks={checks} tickProps={tickProps} />}
-        <AllMonths t={t} skip={[thisMonth.key, upcomingMonth?.key]} checks={checks} tickProps={tickProps} />
+        <MonthCard t={t} month={thisMonth} label="This month" checks={checks} tickProps={tickProps} metrics={metrics} today={today} />
+        {upcomingMonth && <MonthCard t={t} month={upcomingMonth} label="Next month" checks={checks} tickProps={tickProps} metrics={metrics} today={today} />}
+        <AllMonths t={t} skip={[thisMonth.key, upcomingMonth?.key]} checks={checks} tickProps={tickProps} metrics={metrics} today={today} />
       </section>
 
       {/* ------------------------------------------------------------ 4. weeks */}
@@ -169,13 +174,15 @@ type TickProps = (taskKey: string, period: string, locked?: boolean) => { checke
 // ---------------------------------------------------------------------------
 function GoalsCard({ t, checks, tickProps, metrics }: { t: PlanTemplate; checks: Set<string>; tickProps: TickProps; metrics: MetricView[] }) {
   const c = goalsCount(t, checks);
+  const books = booksCount(t, checks);
+  const end = t.months.at(-1)!;
   const latest = (pick: (m: MetricView) => number | null) => [...metrics].reverse().map(pick).find((v): v is number => v !== null) ?? null;
   const bestRun = metrics.reduce<number | null>((m, x) => (x.longRunKm !== null && (m === null || x.longRunKm > m) ? x.longRunKm : m), null);
   const stats = [
-    { label: "YouTube", value: latest((m) => m.youtubeSubs), target: 1000, unit: "" },
-    { label: "Instagram", value: latest((m) => m.instagramSubs), target: 1000, unit: "" },
-    { label: "Weight", value: latest((m) => m.weightKg), target: 65, unit: " kg" },
-    { label: "Best long run", value: bestRun, target: 25, unit: " km" },
+    { label: "YouTube", value: latest((m) => m.youtubeSubs), target: end.youtube, unit: "" },
+    { label: "Instagram", value: latest((m) => m.instagramSubs), target: end.instagram, unit: "" },
+    { label: "Weight", value: latest((m) => m.weightKg), target: t.weightGoalKg, unit: " kg" },
+    { label: "Best long run", value: bestRun, target: end.longRunKm, unit: " km" },
   ];
   return (
     <Card className="p-0">
@@ -194,6 +201,16 @@ function GoalsCard({ t, checks, tickProps, metrics }: { t: PlanTemplate; checks:
           {t.goals.map((g) => (
             <Tick key={g.key} title={g.area} detail={g.target} {...tickProps(`goal:${g.key}`, "once")} />
           ))}
+          {t.books.length > 0 && (
+            <div className="mt-2 border-t border-border pt-2">
+              <h3 className="flex items-center gap-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-subtle">
+                <BookOpen className="size-3.5" aria-hidden /> Books · {books.done} of {books.total} finished
+              </h3>
+              {t.books.map((b) => (
+                <Tick key={b.id} title={b.title} {...tickProps(`book:${b.id}`, "once")} />
+              ))}
+            </div>
+          )}
           <div className="mt-2 grid grid-cols-2 gap-2 px-1 pb-1 sm:grid-cols-4">
             {stats.map((s) => (
               <div key={s.label} className="rounded-xl bg-surface-2 p-2.5">
@@ -236,7 +253,7 @@ function TodayCard({
         <div className="text-sm font-bold tabular" aria-live="polite">{c.done} / {c.total}</div>
         {!isToday && compareDates(today, t.startDate) >= 0 && <Button variant="secondary" size="sm" onClick={() => setDay(last)}>Back to today</Button>}
       </div>
-      {rest && <p className="mx-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">😌 Rest day. Only the 30-minute review today.</p>}
+      {rest && <p className="mx-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">😌 Rest day. Keep it light: German, reading and the 30-minute review.</p>}
       {!canTickDay && (
         <p role="status" className="mx-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
           {compareDates(day, today) > 0 ? "This day hasn't happened yet." : "Ticking starts when the plan begins."}
@@ -261,32 +278,66 @@ function TodayCard({
 // ---------------------------------------------------------------------------
 // 3. Months
 // ---------------------------------------------------------------------------
-function MonthCard({ t, month, label, checks, tickProps }: { t: PlanTemplate; month: MonthPlan; label: string; checks: Set<string>; tickProps: TickProps }) {
+function MonthCard({
+  t, month, label, checks, tickProps, metrics, today,
+}: { t: PlanTemplate; month: MonthPlan; label: string; checks: Set<string>; tickProps: TickProps; metrics: MetricView[]; today: ISODate }) {
   const c = monthCount(t, checks, month);
+  const stats = monthStats(t, month, metrics, checks, today);
+  const rows: { label: string; unit: string; decimals: number; stat: Target }[] = [
+    { label: "YouTube", unit: "", decimals: 0, stat: stats.youtube },
+    { label: "Instagram", unit: "", decimals: 0, stat: stats.instagram },
+    { label: "Weight", unit: " kg", decimals: 1, stat: stats.weight },
+    { label: "Long run", unit: " km", decimals: 0, stat: stats.longRun },
+    { label: "Books finished", unit: "", decimals: 0, stat: stats.books },
+  ];
   return (
-    <Card className="space-y-2 p-3">
+    <Card className="space-y-3 p-3">
       <div className="flex items-start justify-between gap-3 px-1">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-subtle">{label}</div>
           <h3 className="text-base font-semibold">{month.name} · {month.focus}</h3>
         </div>
-        <Badge tone={c.done === c.total ? "good" : "neutral"}>{c.done}/{c.total}</Badge>
+        <Badge tone={c.total > 0 && c.done === c.total ? "good" : "neutral"}>{c.done}/{c.total}</Badge>
       </div>
-      <div className="flex flex-wrap gap-1.5 px-1">
-        <Badge>YouTube {formatNumber(month.youtube, 0)}</Badge>
-        <Badge>Instagram {formatNumber(month.instagram, 0)}</Badge>
-        <Badge>Long run {month.longRunKm} km</Badge>
-      </div>
-      <div className="space-y-0.5">
-        {month.results.map((r) => (
-          <Tick key={r.id} title={r.text} {...tickProps(`mres:${month.key}:${r.id}`, "once")} />
+      <dl className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" aria-label={`${month.name} numbers`}>
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline justify-between gap-2 rounded-xl bg-surface-2 px-3 py-2">
+            <dt className="text-sm text-muted">{r.label}</dt>
+            <dd className="text-sm tabular">
+              <span className="font-bold">{r.stat.actual === null ? "–" : formatNumber(r.stat.actual, r.decimals)}</span>
+              <span className="text-subtle"> / {r.stat.target === null ? "?" : formatNumber(r.stat.target, r.decimals)}{r.unit}</span>
+            </dd>
+          </div>
         ))}
-      </div>
+      </dl>
+      {stats.habits.length > 0 && (
+        <details className="group px-1">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-sm font-semibold text-primary">
+            Daily habits this month <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <ul className="space-y-1 pb-1 pt-1 text-sm">
+            {stats.habits.map((h) => (
+              <li key={h.label} className="space-y-0.5">
+                <div className="flex justify-between"><span className="text-muted">{h.label}</span><span className="font-semibold tabular">{h.done}/{h.total}</span></div>
+                <ProgressBar value={h.total === 0 ? 0 : (h.done / h.total) * 100} label={h.label} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {month.results.length > 0 && (
+        <div className="space-y-0.5">
+          <div className="px-3 text-xs font-semibold uppercase tracking-wide text-subtle">Key results</div>
+          {month.results.map((r) => (
+            <Tick key={r.id} title={r.text} {...tickProps(`mres:${month.key}:${r.id}`, "once")} />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
-function AllMonths({ t, skip, checks, tickProps }: { t: PlanTemplate; skip: (string | undefined)[]; checks: Set<string>; tickProps: TickProps }) {
+function AllMonths({ t, skip, checks, tickProps, metrics, today }: { t: PlanTemplate; skip: (string | undefined)[]; checks: Set<string>; tickProps: TickProps; metrics: MetricView[]; today: ISODate }) {
   const rest = t.months.filter((m) => !skip.includes(m.key));
   if (rest.length === 0) return null;
   return (
@@ -295,7 +346,7 @@ function AllMonths({ t, skip, checks, tickProps }: { t: PlanTemplate; skip: (str
         Show the other months <ChevronDown className="size-5 transition-transform group-open:rotate-180" aria-hidden />
       </summary>
       <div className="space-y-3 border-t border-border p-3">
-        {rest.map((m) => <MonthCard key={m.key} t={t} month={m} label="Month" checks={checks} tickProps={tickProps} />)}
+        {rest.map((m) => <MonthCard key={m.key} t={t} month={m} label="Month" checks={checks} tickProps={tickProps} metrics={metrics} today={today} />)}
       </div>
     </details>
   );
@@ -447,7 +498,7 @@ function ScheduleCard({ t, today }: { t: PlanTemplate; today: ISODate }) {
       </div>
       <Card className="space-y-1 p-3">
         <h3 className="font-semibold">Every day</h3>
-        <p className="text-sm text-muted">Breakfast: protein, creatine and calcium, no soda · Evening: exercise at 19:00 (Mon, Wed, Thu, Sat) · Lights out by 23:30</p>
+        <p className="text-sm text-muted">Breakfast: protein, creatine and calcium, no soda · German and reading every day · Evening: exercise at 19:00 (Mon, Wed, Thu, Sat) · Lights out by 23:30</p>
       </Card>
       <div className="grid gap-3 md:grid-cols-2">
         {t.schedule.map((d) => {

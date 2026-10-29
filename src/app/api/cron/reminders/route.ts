@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { authBaseUrl } from "@/lib/auth/origins";
 import { getDb } from "@/lib/db/client";
-import { sendEmail } from "@/lib/email";
+import { emailConfigured, sendEmail } from "@/lib/email";
 import { sendDueReminders } from "@/lib/services/reminders";
+import { sendDueTelegramReminders } from "@/lib/services/telegram";
+import { ensureWebhook, telegramApi, telegramConfigured } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -18,19 +20,32 @@ function authorized(req: Request): boolean {
 
 /**
  * Called every ~15 minutes by a scheduler (GitHub Actions, see .github/workflows/reminders.yml) with
- * `Authorization: Bearer $CRON_SECRET`. Sends the plan reminders that are due; safe to call as often as you like.
+ * `Authorization: Bearer $CRON_SECRET`. Sends the email and Telegram reminders that are due and keeps the Telegram
+ * webhook pointed at this app; safe to call as often as you like.
  */
 async function handle(req: Request) {
   if (!process.env.CRON_SECRET?.trim()) {
     return Response.json({ status: "cron_secret_missing", hint: "Set CRON_SECRET in the environment and redeploy." }, { status: 503 });
   }
   if (!authorized(req)) return Response.json({ status: "unauthorized" }, { status: 401 });
-  if (!process.env.RESEND_API_KEY?.trim()) {
-    return Response.json({ status: "email_not_configured", hint: "Set RESEND_API_KEY to send reminder emails." }, { status: 503 });
+  const email = emailConfigured();
+  const telegram = telegramConfigured();
+  if (!email && !telegram) {
+    return Response.json({ status: "nothing_configured", hint: "Set RESEND_API_KEY (email) and/or TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME and TELEGRAM_WEBHOOK_SECRET (Telegram)." }, { status: 503 });
   }
   const now = process.env.E2E_FIXED_NOW ? new Date(process.env.E2E_FIXED_NOW) : new Date();
-  const result = await sendDueReminders(getDb(), now, sendEmail, authBaseUrl());
-  return Response.json({ status: "ok", ...result });
+  const db = getDb();
+  const result: Record<string, unknown> = { status: "ok" };
+  if (email) result.email = await sendDueReminders(db, now, sendEmail, authBaseUrl());
+  if (telegram) {
+    try {
+      await ensureWebhook(authBaseUrl());
+    } catch (err) {
+      result.webhook = err instanceof Error ? err.message : "failed";
+    }
+    result.telegram = await sendDueTelegramReminders(db, now, telegramApi);
+  }
+  return Response.json(result);
 }
 
 export const GET = handle;

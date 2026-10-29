@@ -1,4 +1,4 @@
-# Sends the daily "tick your day" emails. GitHub's scheduler is best-effort (runs can be a few minutes late),
+# Sends the daily "tick your day" emails and Telegram messages (and keeps the Telegram webhook registered). GitHub's scheduler is best-effort (runs can be a few minutes late),
 # which is fine: the endpoint is idempotent and catches up for a few hours.
 #
 # Needs two repository secrets (Settings → Secrets and variables → Actions):

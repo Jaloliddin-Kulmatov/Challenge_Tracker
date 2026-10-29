@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 import { saveMetricsAction, setCheckAction } from "@/app/actions/plan";
 import { ReminderCard, type ReminderProps } from "@/components/plan/reminder-card";
+import { TelegramCard, type TelegramProps } from "@/components/plan/telegram-card";
 import { Tick } from "@/components/plan/tick";
 import { AnalysisCard, DayTimeline, WeekdayTimeline } from "@/components/plan/timeline-view";
 import { Badge, Card, CardTitle, ProgressBar } from "@/components/ui/card";
@@ -26,11 +27,12 @@ interface Props {
   initialChecks: string[];
   initialMetrics: MetricView[];
   reminder: ReminderProps;
+  telegram: TelegramProps;
 }
 
 const pct = (c: Count) => (c.total === 0 ? 0 : (c.done / c.total) * 100);
 
-export function PlanView({ template: t, today, initialChecks, initialMetrics, reminder }: Props) {
+export function PlanView({ template: t, today, initialChecks, initialMetrics, reminder, telegram }: Props) {
   const templateKey = t.key;
   const toast = useToast();
   const [checks, setChecks] = React.useState<Set<string>>(() => new Set(initialChecks));
@@ -124,6 +126,7 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics, re
           </Card>
         </div>
         <ReminderCard initial={reminder} />
+        <TelegramCard initial={telegram} />
         <nav aria-label="Sections" className="sticky top-14 z-10 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
           {[["goals", "Goals"], ["today", "Today"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"], ["analysis", "Analysis"]].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-sm font-semibold text-muted hover:bg-border">{label}</a>

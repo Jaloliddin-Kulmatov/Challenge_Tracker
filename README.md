@@ -42,6 +42,27 @@ Set up once:
    (e.g. `https://challenge-tracker-bay.vercel.app`).
 4. On the plan page switch the reminder on and press **Send me a test email**.
 
+## Telegram bot (reminders you can tap)
+
+Besides email, the plan page has a **Telegram reminder**: every evening (same time as the email, default 23:30) the bot
+sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). `/today` shows today's
+tasks any time, `/stop` disconnects.
+
+* Connecting: **Connect Telegram** opens the bot with a one-time code (valid 15 minutes, stored hashed, single use);
+  pressing *Start* links that chat to your account. A chat can belong to one account only.
+* Taps use exactly the same rules as ticking on the website (your own plan, valid task, not in the future).
+* `POST /api/telegram/webhook` only accepts calls carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it in
+  `X-Telegram-Bot-Api-Secret-Token`); the 15-minute cron (and *Connect Telegram*) registers the webhook, so there is no
+  manual `setWebhook` step. If someone blocks the bot, the link is removed automatically.
+
+Set up once:
+
+1. In Telegram open **@BotFather** → `/newbot` → pick a name and a username ending in `bot`. Copy the token.
+2. Vercel → Environment Variables: `TELEGRAM_BOT_TOKEN` (the token), `TELEGRAM_BOT_USERNAME` (without the @) and
+   `TELEGRAM_WEBHOOK_SECRET` (any random string of letters, digits, `_` or `-`); redeploy. Keep `CRON_SECRET` and the
+   GitHub secrets from *Email reminders* – the same schedule sends the Telegram messages.
+3. On the plan page press **Connect Telegram**, then **Start** in the chat. **Send me today's tasks now** is the test button.
+
 ## Install on your phone (PWA)
 
 The app is installable: `src/app/manifest.ts` (standalone, opens on `/plan`, themed icons incl. a maskable one in

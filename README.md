@@ -1,5 +1,7 @@
 # Challenge Tracker
 
+**Live:** [challenge-tracker-bay.vercel.app](https://challenge-tracker-bay.vercel.app) · **Code:** [github.com/Jaloliddin-Kulmatov/Challenge_Tracker](https://github.com/Jaloliddin-Kulmatov/Challenge_Tracker)
+
 A reusable, multi-user challenge-tracking product: define **any** challenge (running, studying, reading,
 workouts, habits with no numbers at all…), get an automatically generated schedule, log progress from your
 phone, and see accurate statistics, pace, streaks and charts. Built mobile-first.

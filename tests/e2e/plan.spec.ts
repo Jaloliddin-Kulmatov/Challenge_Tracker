@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** The semester plan: start it, tick things, see them persist, log numbers, and never fake a success. */
 // The server's clock is fixed (see playwright.config.ts): Wednesday 21 Oct 2026, week 1 of the plan.
@@ -15,6 +15,13 @@ async function signup(page: Page, projectName: string) {
 }
 
 const today = (page: Page) => page.locator("#today");
+
+/** Click a tick and wait until the server has answered: ticks show instantly, and a reload right after would cancel the save. */
+async function tickAndWait(page: Page, tick: Locator) {
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && "next-action" in r.request().headers());
+  await tick.click();
+  await saved;
+}
 
 test("start the plan, tick today's tasks, and find them again after reloading and logging back in", async ({ page }, info) => {
   const email = await signup(page, info.project.name);
@@ -157,7 +164,7 @@ test("edit the plan: change a goal, add a daily task and a book, finish a book, 
   await expect(page.locator("#goals").getByRole("checkbox", { name: "Atomic Habits" })).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#goals").getByText("1 of 4 finished")).toBeVisible();
 
-  await today(page).getByRole("checkbox", { name: /Walk 20 minutes/ }).click();
+  await tickAndWait(page, today(page).getByRole("checkbox", { name: /Walk 20 minutes/ }));
   await page.reload();
   await expect(today(page).getByRole("checkbox", { name: /Walk 20 minutes/ })).toHaveAttribute("aria-checked", "true");
 });
@@ -269,7 +276,7 @@ test("a tick that fails to save is undone and reported – never shown as done",
 
   // and once the network is back it works
   await page.unroute("**/plan");
-  await german.click();
+  await tickAndWait(page, german);
   await expect(german).toHaveAttribute("aria-checked", "true");
   await page.reload();
   await expect(today(page).getByRole("checkbox", { name: /German/ })).toHaveAttribute("aria-checked", "true");

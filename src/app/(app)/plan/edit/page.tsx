@@ -12,5 +12,5 @@ export default async function EditPlanPage() {
   const { ctx } = await requireCtx();
   const data = await getPlanData(ctx);
   if (!data) redirect("/plan");
-  return <PlanEditor templateKey={data.templateKey} title={data.template.title} initial={contentOf(data.template)} edited={data.edited} />;
+  return <PlanEditor templateKey={data.templateKey} title={data.template.title} initial={contentOf(data.template)} schedule={data.template.schedule} edited={data.edited} />;
 }

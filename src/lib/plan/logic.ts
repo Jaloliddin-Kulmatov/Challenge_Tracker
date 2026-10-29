@@ -217,8 +217,6 @@ export function perfectDays(t: PlanTemplate, checks: CheckSet, today: ISODate): 
 export interface WeekNumbers {
   week: number;
   weightKg: number | null;
-  youtubeSubs: number | null;
-  instagramSubs: number | null;
   longRunKm: number | null;
 }
 
@@ -267,8 +265,6 @@ export interface HabitStat {
 }
 
 export interface MonthStats {
-  youtube: Target;
-  instagram: Target;
   weight: Target;
   longRun: Target;
   books: Target;
@@ -278,7 +274,7 @@ export interface MonthStats {
 const lastOf = (values: (number | null)[]) => [...values].reverse().find((v): v is number => v !== null) ?? null;
 
 /**
- * Where you stand in a month. Subscribers and weight are "latest logged by the end of the month";
+ * Where you stand in a month. Weight is "latest logged by the end of the month";
  * the long run is the best one logged in the month; books is how many are ticked (only meaningful from the month on).
  */
 export function monthStats(t: PlanTemplate, month: MonthPlan, metrics: readonly WeekNumbers[], checks: CheckSet, today: ISODate): MonthStats {
@@ -303,8 +299,6 @@ export function monthStats(t: PlanTemplate, month: MonthPlan, metrics: readonly 
 
   const bestRun = inMonth.reduce<number | null>((m, x) => (x.longRunKm !== null && (m === null || x.longRunKm > m) ? x.longRunKm : m), null);
   return {
-    youtube: { target: month.youtube, actual: lastOf(upTo.map((m) => m.youtubeSubs)) },
-    instagram: { target: month.instagram, actual: lastOf(upTo.map((m) => m.instagramSubs)) },
     weight: { target: weightTarget(t, month, metrics), actual: lastOf(upTo.map((m) => m.weightKg)) },
     longRun: { target: month.longRunKm, actual: bestRun },
     books: { target: month.books, actual: booksCount(t, checks).done },

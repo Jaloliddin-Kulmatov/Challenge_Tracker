@@ -18,6 +18,8 @@ export interface DailyTask {
   detailByWeekday?: Record<number, string>;
   /** Append the week's long-run target on this weekday (e.g. Thursday). */
   appendLongRunOn?: number;
+  /** True when the task needs no slot in the timeline (e.g. "talk to one new person"). */
+  anytime?: boolean;
   /** Label for the monthly "habits" count, e.g. "German days". Tasks without one aren't counted monthly. */
   habit?: string;
 }
@@ -37,12 +39,31 @@ export interface ClassSession {
   place: string;
 }
 
+/** The university timetable for one weekday (fixed by the faculty, not editable). */
 export interface ScheduleDay {
   weekday: number;
   classes: ClassSession[];
-  free: string[];
-  exercise?: { time: string; what: string };
-  note?: string;
+}
+
+export const BLOCK_KINDS = ["study", "meal", "exercise", "travel", "social", "rest", "sleep"] as const;
+export type BlockKind = (typeof BLOCK_KINDS)[number];
+
+/**
+ * One block of a day's timeline, "HH:MM" to "HH:MM" ("24:00" = midnight). A block linked to a daily task (`taskKey`)
+ * is ticked there and takes the task's wording; any other block has its own title.
+ */
+export interface TimelineBlock {
+  id: string;
+  start: string;
+  end: string;
+  kind: BlockKind;
+  title: string;
+  taskKey?: string;
+}
+
+export interface TimelineDay {
+  weekday: number;
+  blocks: TimelineBlock[];
 }
 
 export interface MonthPlan {
@@ -52,8 +73,6 @@ export interface MonthPlan {
   year: number;
   month: number;
   focus: string;
-  youtube: number;
-  instagram: number;
   longRunKm: number;
   /** Target weight at the end of the month; null = a straight line from the first logged weight to the goal. */
   weightKg: number | null;
@@ -81,7 +100,7 @@ export interface KeyDate {
 }
 
 /** The parts of a plan the user can edit; stored per user, the template's own copy is the default. */
-export type PlanContent = Pick<PlanTemplate, "goals" | "dailyTasks" | "weeklyGoals" | "books" | "months" | "weeks">;
+export type PlanContent = Pick<PlanTemplate, "goals" | "dailyTasks" | "weeklyGoals" | "books" | "months" | "weeks" | "timeline">;
 
 export interface PlanTemplate {
   key: string;
@@ -97,6 +116,8 @@ export interface PlanTemplate {
   weeklyGoals: WeeklyGoal[];
   books: PlanBook[];
   schedule: ScheduleDay[];
+  /** The hour-by-hour plan of each weekday; classes come from `schedule`. */
+  timeline: TimelineDay[];
   months: MonthPlan[];
   weeks: WeekPlan[];
   keyDates: KeyDate[];

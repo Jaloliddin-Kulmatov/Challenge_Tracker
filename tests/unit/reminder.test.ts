@@ -9,9 +9,9 @@ const URL = "https://tracker.example.com/";
 describe("reminder email", () => {
   it("lists what is still open today, with the 19:00 workout detail and a link to today", () => {
     const m = composeReminder(T, new Set([checkKey("daily:german", WED)]), WED, URL)!;
-    expect(m.total).toBe(10);
-    expect(m.left).toBe(9);
-    expect(m.subject).toBe("Tick your day: 9 of 10 still open");
+    expect(m.total).toBe(9);
+    expect(m.left).toBe(8);
+    expect(m.subject).toBe("Tick your day: 8 of 9 still open");
     expect(m.text).toContain("Exercise (Strength)");
     expect(m.text).not.toContain("German");
     expect(m.text).toContain("https://tracker.example.com/plan#today");

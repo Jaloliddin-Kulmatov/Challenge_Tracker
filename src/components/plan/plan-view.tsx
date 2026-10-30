@@ -5,6 +5,7 @@ import * as React from "react";
 import { saveMetricsAction, setCheckAction } from "@/app/actions/plan";
 import { ReminderCard, type ReminderProps } from "@/components/plan/reminder-card";
 import { TelegramCard, type TelegramProps } from "@/components/plan/telegram-card";
+import { TodoCard } from "@/components/plan/todo-card";
 import { Tick } from "@/components/plan/tick";
 import { AnalysisCard, DayTimeline, WeekdayTimeline } from "@/components/plan/timeline-view";
 import { Badge, Card, CardTitle, ProgressBar } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/plan/logic";
 import type { MonthPlan, PlanTemplate } from "@/lib/plan/types";
 import type { MetricView } from "@/lib/services/plan";
+import type { Todo } from "@/lib/services/todos";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -28,11 +30,12 @@ interface Props {
   initialMetrics: MetricView[];
   reminder: ReminderProps;
   telegram: TelegramProps;
+  todos: Todo[];
 }
 
 const pct = (c: Count) => (c.total === 0 ? 0 : (c.done / c.total) * 100);
 
-export function PlanView({ template: t, today, initialChecks, initialMetrics, reminder, telegram }: Props) {
+export function PlanView({ template: t, today, initialChecks, initialMetrics, reminder, telegram, todos }: Props) {
   const templateKey = t.key;
   const toast = useToast();
   const [checks, setChecks] = React.useState<Set<string>>(() => new Set(initialChecks));
@@ -128,7 +131,7 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics, re
         <ReminderCard initial={reminder} />
         <TelegramCard initial={telegram} />
         <nav aria-label="Sections" className="sticky top-14 z-10 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
-          {[["goals", "Goals"], ["today", "Today"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"], ["analysis", "Analysis"]].map(([id, label]) => (
+          {[["goals", "Goals"], ["today", "Today"], ["todos", "To-do"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"], ["analysis", "Analysis"]].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-sm font-semibold text-muted hover:bg-border">{label}</a>
           ))}
         </nav>
@@ -142,6 +145,11 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics, re
       {/* ------------------------------------------------------------ 2. today */}
       <section id="today" aria-labelledby="today-h" className="scroll-mt-28">
         <TodayCard t={t} day={day} setDay={setDay} today={today} canTickDay={canTickDay} checks={checks} tickProps={tickProps} />
+      </section>
+
+      {/* ------------------------------------------------------------- to-dos */}
+      <section id="todos" aria-labelledby="todos-h" className="scroll-mt-28">
+        <TodoCard initial={todos} today={today} />
       </section>
 
       {/* ----------------------------------------------------------- 3. months */}

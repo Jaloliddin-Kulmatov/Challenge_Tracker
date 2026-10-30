@@ -18,7 +18,12 @@ export interface TelegramApi {
 export interface TelegramUpdate {
   update_id: number;
   message?: { message_id: number; chat: { id: number; type: string }; from?: { id: number }; text?: string; reply_to_message?: { text?: string } };
-  callback_query?: { id: string; from: { id: number }; message?: { message_id: number; chat: { id: number; type: string } }; data?: string };
+  callback_query?: {
+    id: string;
+    from: { id: number };
+    message?: { message_id: number; chat: { id: number; type: string }; text?: string; reply_markup?: { inline_keyboard?: { text: string; callback_data?: string }[][] } };
+    data?: string;
+  };
 }
 
 export class TelegramError extends Error {
@@ -68,9 +73,16 @@ export const telegramApi: TelegramApi = {
 export async function ensureWebhook(appUrl: string): Promise<void> {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!secret) return;
+  await call("setMyShortDescription", { short_description: "Your daily plan and to-do list: tick tasks, add to-dos, get an evening reminder." });
+  await call("setMyDescription", {
+    description:
+      "Your daily plan and to-do list in Telegram.\n\n• Just send me a message to add a to-do (add a day like “fri” or “tomorrow” for a due date)\n• Every evening I send what you haven't ticked: tap a task to tick it\n• /today, /todos, /week, /add and more\n\nConnect me from the plan page on the website.",
+  });
   // the menu that opens when typing "/"
   await call("setMyCommands", {
     commands: [
+      { command: "todos", description: "Your to-do list" },
+      { command: "todo", description: "Add a to-do (or just send me a message)" },
       { command: "today", description: "Today's tasks (tap to tick)" },
       { command: "timeline", description: "Today hour by hour" },
       { command: "week", description: "How this week is going" },

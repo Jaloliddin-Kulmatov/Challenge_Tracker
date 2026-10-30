@@ -263,6 +263,36 @@ test("today is an hour-by-hour timeline with ticks, there is an analysis of the 
   await expect(page.getByRole("main").getByRole("alert")).toContainText(/“Late tea” overlap|overlap/);
 });
 
+test("one-off to-dos: add with a date, finish, delete, and they are still there after a reload", async ({ page }, info) => {
+  await signup(page, info.project.name);
+  await page.goto("/plan");
+  await page.getByRole("button", { name: "Start my plan" }).click();
+  await expect(page.getByRole("heading", { name: "Semester 4 · Malaysia", level: 1 })).toBeVisible();
+
+  const card = page.locator("#todos");
+  await expect(card.getByText("Nothing to do.")).toBeVisible();
+  await card.getByLabel("New to-do").fill("Buy a SIM card");
+  await card.getByLabel("Due date (optional)").fill("2026-10-20");
+  await card.getByRole("button", { name: "Add" }).click();
+  await expect(card.getByRole("checkbox", { name: /Buy a SIM card/ })).toContainText("Overdue since Oct 20"); // "today" is 21 Oct in the test
+  await card.getByLabel("New to-do").fill("Call mum");
+  await card.getByRole("button", { name: "Add" }).click();
+  await expect(card.getByRole("checkbox", { name: /Call mum/ })).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator("#todos").getByRole("checkbox", { name: /Buy a SIM card/ })).toBeVisible();
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && "next-action" in r.request().headers());
+  await page.locator("#todos").getByRole("checkbox", { name: /Buy a SIM card/ }).click();
+  await saved;
+  await expect(page.locator("#todos").getByRole("checkbox", { name: /Buy a SIM card/ })).toHaveCount(0);
+  const deleted = page.waitForResponse((r) => r.request().method() === "POST" && "next-action" in r.request().headers());
+  await page.locator("#todos").getByRole("button", { name: "Delete Call mum" }).click();
+  await deleted;
+
+  await page.reload();
+  await expect(page.locator("#todos").getByText("Nothing to do.")).toBeVisible();
+});
+
 test("a tick that fails to save is undone and reported – never shown as done", async ({ page }, info) => {
   await signup(page, info.project.name);
   await page.goto("/plan");

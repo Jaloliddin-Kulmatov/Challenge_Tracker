@@ -7,22 +7,28 @@ import { and, eq, gt } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { Db } from "@/lib/db/client";
 import * as s from "@/lib/db/schema";
-import { addDays, formatDateShort, type ISODate } from "@/lib/core/dates";
+import { addDays, formatDateShort, localDateIn, type ISODate } from "@/lib/core/dates";
 import { WEEKDAY_SHORT } from "@/lib/core/format";
 import { addDailyTask, parseDays, removeDailyTask, renameDailyTask } from "@/lib/plan/content";
 import { booksCount, checkKey, dailyTasksFor, dayCount, perfectDays, weekCount, weekOf, weekRange } from "@/lib/plan/logic";
-import { composeTelegram, parseTickData } from "@/lib/plan/reminder";
+import { parseTickData } from "@/lib/plan/reminder";
+import { splitDue } from "@/lib/todos";
 import { timelineFor } from "@/lib/plan/timeline";
 import type { Keyboard, TelegramApi, TelegramUpdate } from "@/lib/telegram";
 import type { Ctx } from "./context";
 import { AppError } from "./errors";
 import { editPlanContent, saveMetrics, setCheck } from "./plan";
-import { DEFAULT_TIME, getTelegramState, loadDay, sendDay, setTelegramReminder } from "./telegram";
+import { composeDay, DEFAULT_TIME, getTelegramState, loadDay, sendDay, setTelegramReminder, todoLabel } from "./telegram";
+import { addTodo, deleteTodo, isTodoId, listOpenTodos, setTodoDone } from "./todos";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 const HELP = [
-  "Your plan, in Telegram. Every evening I send what you haven't ticked; tap a task to tick it.",
+  "Your plan and to-do list, in Telegram. Every evening I send what you haven't ticked; tap a task to tick it.",
+  "",
+  "To-dos",
+  "Just send me a message to add a to-do. End it with a day for a due date: “buy a SIM card fri”, “call mum tomorrow”, “pay rent 2026-11-30”.",
+  "/todos – your open to-dos (tap to finish)",
   "",
   "Today",
   "/today – today's tasks (tap to tick)",
@@ -101,6 +107,10 @@ async function handleMessage(db: Db, api: TelegramApi, msg: NonNullable<Telegram
         await db.delete(s.telegramLinks).where(eq(s.telegramLinks.userId, user.id));
         await db.update(s.notificationPreferences).set({ telegramEnabled: false, updatedAt: new Date() }).where(eq(s.notificationPreferences.userId, user.id));
         return void (await api.sendMessage(chatId, "Disconnected. You won't get reminders here any more. You can connect again from the website."));
+      case "/todos":
+        return void (await showTodos(ctx, chat));
+      case "/todo":
+        return void (await addTodoFrom(ctx, chat, arg));
       case "/today":
         if (!(await sendDay(db, api, user.id, chatId, now))) await api.sendMessage(chatId, "There is nothing to tick today: your plan isn't running.");
         return;
@@ -127,6 +137,8 @@ async function handleMessage(db: Db, api: TelegramApi, msg: NonNullable<Telegram
       case "/start":
         return void (await api.sendMessage(chatId, `You're connected.\n\n${HELP}`));
       default:
+        // anything that isn't a command is a new to-do
+        if (!cmd) return void (await addTodoFrom(ctx, chat, text));
         return void (await api.sendMessage(chatId, HELP));
     }
   } catch (err) {
@@ -223,6 +235,25 @@ async function offerBooks(db: Db, chat: Chat) {
   await chat.api.sendMessage(chat.id, `${text}\n\nTap a book you just finished:`, open.map((b) => [{ text: `📖 ${clip(b.title)}`, callback_data: `b:${b.id}` }]));
 }
 
+async function addTodoFrom(ctx: Ctx, chat: Chat, text: string) {
+  if (!text) return void (await chat.api.sendMessage(chat.id, "Tell me the to-do, for example:\n/todo buy a SIM card fri\nor just send the text without a command."));
+  const { title, due } = splitDue(text, localDateIn(chat.now, chat.user.timezone));
+  const todo = await addTodo(ctx, { title, dueDate: due });
+  await chat.api.sendMessage(chat.id, `📝 Added: ${todo.title}${todo.dueDate ? ` · due ${formatDateShort(todo.dueDate)}` : ""}`, [[{ text: "↩ Undo", callback_data: `tx:${todo.id}` }]]);
+}
+
+async function showTodos(ctx: Ctx, chat: Chat) {
+  const open = await listOpenTodos(ctx);
+  if (open.length === 0) return void (await chat.api.sendMessage(chat.id, "No open to-dos. 🎉 Send me a message to add one."));
+  const today = localDateIn(chat.now, chat.user.timezone);
+  const shown = open.slice(0, 25);
+  await chat.api.sendMessage(
+    chat.id,
+    [`Your to-dos (${open.length}):`, ...shown.map((t) => `• ${todoLabel(t, today)}`), open.length > shown.length ? `…and ${open.length - shown.length} more on the website` : ""].filter(Boolean).join("\n") + "\n\nTap ✅ to finish, 🗑 to delete.",
+    shown.map((t) => [{ text: `✅ ${clip(t.title, 30)}`, callback_data: `td:${t.id}` }, { text: "🗑", callback_data: `tx:${t.id}` }]),
+  );
+}
+
 async function add(ctx: Ctx, chat: Chat, words: string[]) {
   // "/add Walk 20 min mon wed fri": trailing day words are the days, the rest is the title
   let cut = words.length;
@@ -294,8 +325,20 @@ async function handleCallback(db: Db, api: TelegramApi, q: Callback, now: Date):
       await api.answerCallback(q.id, "Ticked ✅");
       // refresh the message so the ticked task disappears
       const day = await loadDay(db, user.id, now);
-      const msg = day && tick.date === day.today ? composeTelegram(day.t, day.checks, day.today) : null;
-      return void (msg ? await edit(msg.text, msg.keyboard) : await edit("✅ Saved."));
+      const msg = day && tick.date === day.today ? await composeDay(db, user.id, now) : null;
+      return void (msg ? await edit(msg.text, msg.keyboard) : await edit(tick.date === day?.today ? "🎉 All done for today. Well done!" : "✅ Saved."));
+    }
+
+    const todoCb = /^(td|tx|tu):([0-9a-f-]{36})$/.exec(data);
+    if (todoCb && isTodoId(todoCb[2]!)) {
+      const [, action, id] = todoCb as unknown as [string, string, string];
+      const todo = action === "tx" ? await deleteTodo(ctx, id) : await setTodoDone(ctx, id, action === "td");
+      await api.answerCallback(q.id, action === "td" ? "Done ✅" : action === "tx" ? "Deleted" : "Back on the list");
+      // keep the rest of the message (other tasks and to-dos), just retire this to-do's buttons
+      const rows = (q.message?.reply_markup?.inline_keyboard ?? []).filter((row) => !row.some((b) => b.callback_data?.endsWith(id)));
+      const note = action === "td" ? `✅ Done: ${todo.title}` : action === "tx" ? `🗑 Deleted: ${todo.title}` : `↩️ Back on your list: ${todo.title}`;
+      const keyboard = action === "td" ? [...rows, [{ text: "↩ Undo", callback_data: `tu:${id}` }]] : rows;
+      return void (await edit(`${(q.message?.text ?? "").replace(/\n*$/, "")}\n\n${note}`.trim().slice(0, 4000), keyboard.map((r) => r.map((b) => ({ text: b.text, callback_data: b.callback_data ?? "rn" })))));
     }
 
     const m = /^(u|b|n|r|ry):([a-z0-9-]{1,30})(?::(\d{4}-\d{2}-\d{2}))?$/.exec(data);

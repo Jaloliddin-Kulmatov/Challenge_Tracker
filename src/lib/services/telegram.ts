@@ -3,12 +3,13 @@ import { eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/lib/db/client";
 import * as s from "@/lib/db/schema";
-import { localDateIn, localTimeIn } from "@/lib/core/dates";
+import { formatDateShort, localDateIn, localTimeIn } from "@/lib/core/dates";
 import { applyContent } from "@/lib/plan/content";
 import { checkKey } from "@/lib/plan/logic";
 import { composeTelegram, reminderDue } from "@/lib/plan/reminder";
 import { getTemplate } from "@/lib/plan/templates";
-import { TelegramError, type TelegramApi } from "@/lib/telegram";
+import { TelegramError, type Keyboard, type TelegramApi } from "@/lib/telegram";
+import { listDueTodos, type Todo } from "./todos";
 import { parseInput } from "@/lib/validation";
 import type { Ctx } from "./context";
 import { badState } from "./errors";
@@ -91,10 +92,28 @@ export async function loadDay(db: Db, userId: string, now: Date) {
   };
 }
 
+export const todoLabel = (t: Todo, today: string) => `${t.dueDate && t.dueDate < today ? "⚠️ " : ""}${t.title}${t.dueDate ? ` (${t.dueDate === today ? "today" : t.dueDate < today ? `overdue since ${formatDateShort(t.dueDate)}` : formatDateShort(t.dueDate)})` : ""}`;
+const clipBtn = (t: string, n = 44) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+/**
+ * The day's message: the plan's open tasks (tap to tick) and the to-dos that are due or overdue (tap to finish).
+ * Null when there is nothing at all to say (no running plan and nothing due).
+ */
+export async function composeDay(db: Db, userId: string, now: Date): Promise<{ text: string; keyboard: Keyboard; open: number } | null> {
+  const [u] = await db.select({ timezone: s.user.timezone }).from(s.user).where(eq(s.user.id, userId)).limit(1);
+  if (!u) return null;
+  const today = localDateIn(now, u.timezone);
+  const [day, due] = await Promise.all([loadDay(db, userId, now), listDueTodos({ db, user: { id: userId, timezone: u.timezone }, now }, today)]);
+  const plan = day && composeTelegram(day.t, day.checks, day.today);
+  if (!plan && due.length === 0) return null;
+  const text = [plan?.text, due.length > 0 ? `To-dos due:\n${due.map((t) => `• ${todoLabel(t, today)}`).join("\n")}` : null].filter(Boolean).join("\n\n");
+  const keyboard: Keyboard = [...(plan?.keyboard ?? []), ...due.slice(0, 20).map((t) => [{ text: `☐ ${clipBtn(t.title)}`, callback_data: `td:${t.id}` }])];
+  return { text, keyboard, open: keyboard.length };
+}
+
 /** Send the day's message to the user's chat. Returns false when there is nothing to say. */
 export async function sendDay(db: Db, api: TelegramApi, userId: string, chatId: string, now: Date): Promise<boolean> {
-  const day = await loadDay(db, userId, now);
-  const msg = day && composeTelegram(day.t, day.checks, day.today);
+  const msg = await composeDay(db, userId, now);
   if (!msg) return false;
   await api.sendMessage(chatId, msg.text, msg.keyboard);
   return true;
@@ -139,13 +158,12 @@ export async function sendDueTelegramReminders(db: Db, now: Date, api: TelegramA
         run.skipped += 1;
         continue;
       }
-      const day = await loadDay(db, r.userId, now);
-      const msg = day && composeTelegram(day.t, day.checks, day.today);
-      if (!day || !msg || msg.keyboard.length === 0) {
+      const msg = await composeDay(db, r.userId, now);
+      if (!msg || msg.open === 0) {
         run.skipped += 1;
         continue;
       }
-      const claimed = await db.insert(s.reminderLog).values({ userId: r.userId, kind: KIND, localDate: day.today }).onConflictDoNothing().returning({ id: s.reminderLog.id });
+      const claimed = await db.insert(s.reminderLog).values({ userId: r.userId, kind: KIND, localDate: localDateIn(now, r.timezone) }).onConflictDoNothing().returning({ id: s.reminderLog.id });
       if (claimed.length === 0) {
         run.skipped += 1;
         continue;

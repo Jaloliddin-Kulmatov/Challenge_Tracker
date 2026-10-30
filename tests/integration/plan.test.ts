@@ -64,11 +64,11 @@ describe("semester plan", () => {
     const ctx = at(u, WED);
     await startPlan(ctx);
     await setCheck(ctx, { taskKey: "goal:grades", period: "once", checked: true });
-    await setCheck(ctx, { taskKey: "weekly:youtube", period: "W1", checked: true });
+    await setCheck(ctx, { taskKey: "weekly:dl", period: "W1", checked: true });
     await setCheck(ctx, { taskKey: "wtask:w1t1", period: "W1", checked: true });
     await setCheck(ctx, { taskKey: "wtask:w9t1", period: "W9", checked: true }); // finishing a later week's task early is allowed
     await setCheck(ctx, { taskKey: "mres:oct:r1", period: "once", checked: true });
-    await rejects(setCheck(ctx, { taskKey: "weekly:youtube", period: "W2", checked: true }), "VALIDATION", /hasn't started/);
+    await rejects(setCheck(ctx, { taskKey: "weekly:dl", period: "W2", checked: true }), "VALIDATION", /hasn't started/);
     await rejects(setCheck(ctx, { taskKey: "wtask:w1t1", period: "W2", checked: true }), "VALIDATION");
     expect((await getPlanData(ctx))!.checks).toHaveLength(5);
   });
@@ -101,19 +101,17 @@ describe("semester plan", () => {
     const u = await makeUser();
     const ctx = at(u, "2026-10-26T10:00:00Z"); // Monday of week 2
     await startPlan(ctx);
-    await saveMetrics(ctx, { period: "W1", weightKg: 71.26, youtubeSubs: 12 });
-    await saveMetrics(ctx, { period: "W1", instagramSubs: 9, longRunKm: 15 }); // adds, doesn't wipe
+    await saveMetrics(ctx, { period: "W1", weightKg: 71.26 });
+    await saveMetrics(ctx, { period: "W1", longRunKm: 15 }); // adds, doesn't wipe
     let m = (await getPlanData(ctx))!.metrics;
-    expect(m).toEqual([{ week: 1, weightKg: 71.3, youtubeSubs: 12, instagramSubs: 9, longRunKm: 15 }]);
+    expect(m).toEqual([{ week: 1, weightKg: 71.3, longRunKm: 15 }]);
     await saveMetrics(ctx, { period: "W1", weightKg: null });
     m = (await getPlanData(ctx))!.metrics;
     expect(m[0]!.weightKg).toBeNull();
-    expect(m[0]!.youtubeSubs).toBe(12);
+    expect(m[0]!.longRunKm).toBe(15);
 
     await rejects(saveMetrics(ctx, { period: "W1" }), "VALIDATION", /at least one/i);
     await rejects(saveMetrics(ctx, { period: "W1", weightKg: 5 }), "VALIDATION");
-    await rejects(saveMetrics(ctx, { period: "W1", youtubeSubs: -3 }), "VALIDATION");
-    await rejects(saveMetrics(ctx, { period: "W1", youtubeSubs: 1.5 }), "VALIDATION");
     await rejects(saveMetrics(ctx, { period: "W1", longRunKm: 5000 }), "VALIDATION");
     await rejects(saveMetrics(ctx, { period: "W3", weightKg: 70 }), "VALIDATION", /hasn't started/);
     await rejects(saveMetrics(ctx, { period: "W99", weightKg: 70 }), "VALIDATION");
@@ -125,11 +123,11 @@ describe("semester plan", () => {
     const ctx = at(u, WED);
     await startPlan(ctx);
     expect((await getPlanData(ctx))!.edited).toBe(false);
-    await setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: true });
+    await setCheck(ctx, { taskKey: "daily:newperson", period: "2026-10-21", checked: true });
     await setCheck(ctx, { taskKey: "book:b1", period: "once", checked: true });
 
     const c = structuredClone(contentOf(MALAYSIA_SEM4));
-    c.dailyTasks = c.dailyTasks.filter((d) => d.key !== "post");
+    c.dailyTasks = c.dailyTasks.filter((d) => d.key !== "newperson");
     c.dailyTasks.push({ key: "walk", title: "Walk 20 min", weekdays: [1, 2, 3, 4, 5, 6, 7] });
     c.books[0]!.title = "Deep Work";
     c.goals.push({ key: "sleep8", area: "Sleep", target: "8 hours" });
@@ -146,13 +144,13 @@ describe("semester plan", () => {
     await setCheck(ctx, { taskKey: "daily:walk", period: "2026-10-21", checked: true });
     await setCheck(ctx, { taskKey: "goal:sleep8", period: "once", checked: true });
     await setCheck(ctx, { taskKey: "wtask:w1t777", period: "W1", checked: true });
-    await rejects(setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: false }), "VALIDATION", /Unknown/); // removed
+    await rejects(setCheck(ctx, { taskKey: "daily:newperson", period: "2026-10-21", checked: false }), "VALIDATION", /Unknown/); // removed
 
     await resetPlanContent(ctx);
     const r = (await getPlanData(ctx))!;
     expect(r.edited).toBe(false);
     expect(r.template.books[0]!.title).toBe("Book 1");
-    await setCheck(ctx, { taskKey: "daily:post", period: "2026-10-21", checked: false }); // back again
+    await setCheck(ctx, { taskKey: "daily:newperson", period: "2026-10-21", checked: false }); // back again
     await rejects(setCheck(ctx, { taskKey: "daily:walk", period: "2026-10-21", checked: true }), "VALIDATION", /Unknown/);
   });
 
@@ -222,7 +220,7 @@ describe("evening reminder emails", () => {
     await sendDueReminders(db, new Date("2026-10-21T15:45:00Z"), m.send, URL); // the next cron run
     expect(m.to(email)).toHaveLength(1);
     const mail = m.to(email)[0]!;
-    expect(mail.subject).toBe("Tick your day: 9 of 10 still open");
+    expect(mail.subject).toBe("Tick your day: 8 of 9 still open");
     expect(mail.text).not.toContain("German");
 
     await sendDueReminders(db, new Date("2026-10-22T15:30:00Z"), m.send, URL); // next evening: another one

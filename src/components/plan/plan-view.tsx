@@ -1,10 +1,11 @@
 "use client";
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Dumbbell, Flame, Pencil } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Flame, Pencil } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 import { saveMetricsAction, setCheckAction } from "@/app/actions/plan";
 import { ReminderCard, type ReminderProps } from "@/components/plan/reminder-card";
 import { Tick } from "@/components/plan/tick";
+import { AnalysisCard, DayTimeline, WeekdayTimeline } from "@/components/plan/timeline-view";
 import { Badge, Card, CardTitle, ProgressBar } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -124,7 +125,7 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics, re
         </div>
         <ReminderCard initial={reminder} />
         <nav aria-label="Sections" className="sticky top-14 z-10 -mx-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
-          {[["goals", "Goals"], ["today", "Today"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"]].map(([id, label]) => (
+          {[["goals", "Goals"], ["today", "Today"], ["month", "Month"], ["weeks", "Weeks"], ["schedule", "Schedule"], ["analysis", "Analysis"]].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="min-h-9 shrink-0 rounded-full bg-surface-2 px-4 py-1.5 text-sm font-semibold text-muted hover:bg-border">{label}</a>
           ))}
         </nav>
@@ -166,6 +167,11 @@ export function PlanView({ template: t, today, initialChecks, initialMetrics, re
       <section id="schedule" aria-labelledby="schedule-h" className="scroll-mt-28">
         <ScheduleCard t={t} today={today} />
       </section>
+
+      {/* ---------------------------------------------------------- 6. analysis */}
+      <section id="analysis" aria-labelledby="analysis-h" className="scroll-mt-28">
+        <AnalysisCard t={t} />
+      </section>
     </div>
   );
 }
@@ -182,8 +188,6 @@ function GoalsCard({ t, checks, tickProps, metrics }: { t: PlanTemplate; checks:
   const latest = (pick: (m: MetricView) => number | null) => [...metrics].reverse().map(pick).find((v): v is number => v !== null) ?? null;
   const bestRun = metrics.reduce<number | null>((m, x) => (x.longRunKm !== null && (m === null || x.longRunKm > m) ? x.longRunKm : m), null);
   const stats = [
-    { label: "YouTube", value: latest((m) => m.youtubeSubs), target: end.youtube, unit: "" },
-    { label: "Instagram", value: latest((m) => m.instagramSubs), target: end.instagram, unit: "" },
     { label: "Weight", value: latest((m) => m.weightKg), target: t.weightGoalKg, unit: " kg" },
     { label: "Best long run", value: bestRun, target: end.longRunKm, unit: " km" },
   ];
@@ -214,7 +218,7 @@ function GoalsCard({ t, checks, tickProps, metrics }: { t: PlanTemplate; checks:
               ))}
             </div>
           )}
-          <div className="mt-2 grid grid-cols-2 gap-2 px-1 pb-1 sm:grid-cols-4">
+          <div className="mt-2 grid grid-cols-2 gap-2 px-1 pb-1">
             {stats.map((s) => (
               <div key={s.label} className="rounded-xl bg-surface-2 p-2.5">
                 <div className="text-xs text-muted">{s.label}</div>
@@ -241,6 +245,7 @@ function TodayCard({
   const last = compareDates(today, t.startDate) < 0 ? t.startDate : minDate(today, t.endDate);
   const isToday = day === today;
   const rest = isoWeekday(day) === 7;
+  const [view, setView] = React.useState<"timeline" | "list">("timeline");
   return (
     <Card className="space-y-3 p-0">
       <div className="flex items-center gap-2 px-3 pt-3">
@@ -256,24 +261,41 @@ function TodayCard({
         <div className="text-sm font-bold tabular" aria-live="polite">{c.done} / {c.total}</div>
         {!isToday && compareDates(today, t.startDate) >= 0 && <Button variant="secondary" size="sm" onClick={() => setDay(last)}>Back to today</Button>}
       </div>
+      <div role="group" aria-label="How to show the day" className="mx-4 flex gap-1 rounded-xl bg-surface-2 p-1">
+        {([["timeline", "Timeline"], ["list", "Checklist"]] as const).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={view === v}
+            onClick={() => setView(v)}
+            className={cn("min-h-9 flex-1 rounded-lg text-sm font-semibold", view === v ? "bg-surface text-foreground shadow-sm" : "text-muted")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {rest && <p className="mx-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">😌 Rest day. Keep it light: German, reading and the 30-minute review.</p>}
       {!canTickDay && (
         <p role="status" className="mx-4 rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
           {compareDates(day, today) > 0 ? "This day hasn't happened yet." : "Ticking starts when the plan begins."}
         </p>
       )}
-      <div className="space-y-0.5 px-2 pb-2">
-        {tasks.map((task) => (
-          <Tick
-            key={task.taskKey}
-            title={task.title}
-            detail={task.detail}
-            time={task.time}
-            highlightTime={task.taskKey === "daily:exercise"}
-            {...tickProps(task.taskKey, day, !canTickDay)}
-          />
-        ))}
-      </div>
+      {view === "timeline" ? (
+        <DayTimeline t={t} day={day} isToday={isToday} canTick={canTickDay} tickProps={tickProps} />
+      ) : (
+        <div className="space-y-0.5 px-2 pb-2">
+          {tasks.map((task) => (
+            <Tick
+              key={task.taskKey}
+              title={task.title}
+              detail={task.detail}
+              time={task.time}
+              highlightTime={task.taskKey === "daily:exercise"}
+              {...tickProps(task.taskKey, day, !canTickDay)}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -287,8 +309,6 @@ function MonthCard({
   const c = monthCount(t, checks, month);
   const stats = monthStats(t, month, metrics, checks, today);
   const rows: { label: string; unit: string; decimals: number; stat: Target }[] = [
-    { label: "YouTube", unit: "", decimals: 0, stat: stats.youtube },
-    { label: "Instagram", unit: "", decimals: 0, stat: stats.instagram },
     { label: "Weight", unit: " kg", decimals: 1, stat: stats.weight },
     { label: "Long run", unit: " km", decimals: 0, stat: stats.longRun },
     { label: "Books finished", unit: "", decimals: 0, stat: stats.books },
@@ -428,26 +448,24 @@ function NumbersForm({ n, metrics, onMetrics }: { n: number; metrics: MetricView
   const saved = metrics.find((m) => m.week === n);
   const str = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
   const [weight, setWeight] = React.useState(str(saved?.weightKg));
-  const [yt, setYt] = React.useState(str(saved?.youtubeSubs));
-  const [ig, setIg] = React.useState(str(saved?.instagramSubs));
   const [run, setRun] = React.useState(str(saved?.longRunKm));
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // "" → leave alone if nothing was saved, clear if something was; otherwise the number
-  const field = (text: string, before: number | null | undefined, integer = false): number | null | undefined | "bad" => {
+  const field = (text: string, before: number | null | undefined): number | null | undefined | "bad" => {
     const v = text.trim().replace(",", ".");
     if (v === "") return before === null || before === undefined ? undefined : null;
     const num = Number(v);
-    if (!Number.isFinite(num) || (integer && !Number.isInteger(num))) return "bad";
+    if (!Number.isFinite(num)) return "bad";
     return num;
   };
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const f = { weightKg: field(weight, saved?.weightKg), youtubeSubs: field(yt, saved?.youtubeSubs, true), instagramSubs: field(ig, saved?.instagramSubs, true), longRunKm: field(run, saved?.longRunKm) };
-    if (Object.values(f).includes("bad")) return setError("Please enter plain numbers (subscribers must be whole numbers).");
+    const f = { weightKg: field(weight, saved?.weightKg), longRunKm: field(run, saved?.longRunKm) };
+    if (Object.values(f).includes("bad")) return setError("Please enter plain numbers.");
     setBusy(true);
     try {
       const res = await saveMetricsAction({ period: `W${n}`, ...f });
@@ -459,8 +477,6 @@ function NumbersForm({ n, metrics, onMetrics }: { n: number; metrics: MetricView
       const next: MetricView = {
         week: n,
         weightKg: f.weightKg === undefined ? (saved?.weightKg ?? null) : (f.weightKg as number | null),
-        youtubeSubs: f.youtubeSubs === undefined ? (saved?.youtubeSubs ?? null) : (f.youtubeSubs as number | null),
-        instagramSubs: f.instagramSubs === undefined ? (saved?.instagramSubs ?? null) : (f.instagramSubs as number | null),
         longRunKm: f.longRunKm === undefined ? (saved?.longRunKm ?? null) : (f.longRunKm as number | null),
       };
       onMetrics([...metrics.filter((m) => m.week !== n), next].sort((a, b) => a.week - b.week));
@@ -479,8 +495,6 @@ function NumbersForm({ n, metrics, onMetrics }: { n: number; metrics: MetricView
       <div className="grid grid-cols-2 gap-3">
         <Field label="Weight (kg)" htmlFor={`w${n}-weight`}><Input id={`w${n}-weight`} inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="e.g. 68.5" /></Field>
         <Field label="Long run (km)" htmlFor={`w${n}-run`}><Input id={`w${n}-run`} inputMode="decimal" value={run} onChange={(e) => setRun(e.target.value)} placeholder="e.g. 15" /></Field>
-        <Field label="YouTube subscribers" htmlFor={`w${n}-yt`}><Input id={`w${n}-yt`} inputMode="numeric" value={yt} onChange={(e) => setYt(e.target.value)} /></Field>
-        <Field label="Instagram followers" htmlFor={`w${n}-ig`}><Input id={`w${n}-ig`} inputMode="numeric" value={ig} onChange={(e) => setIg(e.target.value)} /></Field>
       </div>
       {error && <p role="alert" className="text-sm font-medium text-danger">{error}</p>}
       <Button type="submit" variant="secondary" loading={busy}>Save numbers</Button>
@@ -497,12 +511,8 @@ function ScheduleCard({ t, today }: { t: PlanTemplate; today: ISODate }) {
     <div className="space-y-3">
       <div>
         <h2 id="schedule-h" className="text-lg font-semibold">My weekly schedule</h2>
-        <p className="text-sm text-muted">Classes from the UM timetable (rooms checked against MAYA on 8 Oct 2026). Exercise is at <strong>19:00</strong>.</p>
+        <p className="text-sm text-muted">Each day hour by hour: classes from the UM timetable (rooms checked against MAYA on 8 Oct 2026), study, meals and exercise at <strong>19:00</strong>. Lights out by 23:30.</p>
       </div>
-      <Card className="space-y-1 p-3">
-        <h3 className="font-semibold">Every day</h3>
-        <p className="text-sm text-muted">Breakfast: protein, creatine and calcium, no soda · German and reading every day · Evening: exercise at 19:00 (Mon, Wed, Thu, Sat) · Lights out by 23:30</p>
-      </Card>
       <div className="grid gap-3 md:grid-cols-2">
         {t.schedule.map((d) => {
           const isToday = d.weekday === nowWd;
@@ -512,28 +522,7 @@ function ScheduleCard({ t, today }: { t: PlanTemplate; today: ISODate }) {
                 <h3 className="text-base font-semibold">{WEEKDAY_LONG[d.weekday - 1]}</h3>
                 {isToday && <Badge tone="info">Today</Badge>}
               </header>
-              {d.classes.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-subtle">Classes</div>
-                  {d.classes.map((c) => (
-                    <div key={c.time + c.code} className="text-sm">
-                      <div className="font-medium"><span className="tabular text-muted">{c.time}</span> · {c.code} {c.course}</div>
-                      <div className="text-muted">{c.type} · {c.place}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {d.classes.length === 0 && <p className="text-sm text-muted">No classes.</p>}
-              <div className="space-y-1">
-                <div className="text-xs font-semibold uppercase tracking-wide text-subtle">Free time</div>
-                <ul className="list-disc space-y-0.5 pl-5 text-sm">{d.free.map((f) => <li key={f}>{f}</li>)}</ul>
-              </div>
-              {d.exercise && (
-                <div className="flex items-center gap-2 rounded-xl bg-accent/10 px-3 py-2 text-sm font-semibold text-accent">
-                  <Dumbbell className="size-4" aria-hidden />
-                  <span className="tabular">{d.exercise.time}</span> · {d.exercise.what}
-                </div>
-              )}
+              <WeekdayTimeline t={t} weekday={d.weekday} />
             </article>
           );
         })}

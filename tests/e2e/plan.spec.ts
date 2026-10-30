@@ -208,6 +208,9 @@ test("the evening reminder can be switched on and stays on; without an email pro
   const toggle = page.getByRole("switch", { name: /reminder every evening/ });
   await expect(toggle).not.toBeChecked();
   await expect(page.getByText(/Email sending isn't connected/)).toBeVisible(); // no RESEND_API_KEY in the test server
+  await expect(page.getByText("Telegram reminder")).toBeVisible();
+  await expect(page.getByText(/Telegram isn't set up on this server yet/)).toBeVisible(); // no bot token either
+  await expect(page.getByRole("button", { name: "Connect Telegram" })).toHaveCount(0);
   await toggle.check({ force: true });
   await expect(page.getByText("I'll email you at 23:30.")).toBeVisible();
   await expect(page.getByText(/Every day at 23:30 to plan-/)).toBeVisible();

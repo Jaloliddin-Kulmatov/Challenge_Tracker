@@ -136,3 +136,46 @@ export function applyContent(base: PlanTemplate, content: Partial<PlanContent> |
 export function newId(prefix = "x"): string {
   return `${prefix}${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Small edits (used by the website editor and the Telegram bot)
+// ---------------------------------------------------------------------------
+
+const DAY_WORDS: Record<string, number[]> = {
+  mon: [1], tue: [2], wed: [3], thu: [4], fri: [5], sat: [6], sun: [7],
+  daily: [1, 2, 3, 4, 5, 6, 7], everyday: [1, 2, 3, 4, 5, 6, 7], weekdays: [1, 2, 3, 4, 5], weekend: [6, 7],
+};
+
+/** "mon wed fri" / "weekdays" / "daily" → ISO weekdays; null when a word isn't a day. */
+export function parseDays(words: string[]): number[] | null {
+  const days = new Set<number>();
+  for (const w of words) {
+    const set = DAY_WORDS[w.toLowerCase().replace(/[^a-z]/g, "").replace(/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/, (m) => m.slice(0, 3))];
+    if (!set) return null;
+    set.forEach((d) => days.add(d));
+  }
+  return days.size === 0 ? null : [...days].sort((a, b) => a - b);
+}
+
+/** A new daily task. It needs no slot on the timeline (`anytime`); it can be given one in the editor. */
+export function addDailyTask(c: PlanContent, title: string, weekdays: number[]): { content: PlanContent; key: string } {
+  const key = newId("t");
+  return { key, content: { ...c, dailyTasks: [...c.dailyTasks, { key, title: title.trim(), weekdays, anytime: true }] } };
+}
+
+export function renameDailyTask(c: PlanContent, key: string, title: string): PlanContent {
+  return { ...c, dailyTasks: c.dailyTasks.map((d) => (d.key === key ? { ...d, title: title.trim() } : d)) };
+}
+
+/** Remove a daily task; its blocks stay on the timeline as plain blocks with the task's name. Old ticks stop counting. */
+export function removeDailyTask(c: PlanContent, key: string): PlanContent {
+  const task = c.dailyTasks.find((d) => d.key === key);
+  return {
+    ...c,
+    dailyTasks: c.dailyTasks.filter((d) => d.key !== key),
+    timeline: c.timeline.map((day) => ({
+      ...day,
+      blocks: day.blocks.map((b) => (b.taskKey === key ? { id: b.id, start: b.start, end: b.end, kind: b.kind, title: task?.title ?? "Task" } : b)),
+    })),
+  };
+}

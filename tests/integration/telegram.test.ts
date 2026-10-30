@@ -3,8 +3,10 @@ import { eq } from "drizzle-orm";
 import * as s from "@/lib/db/schema";
 import { getPlanData, startPlan } from "@/lib/services/plan";
 import {
-  createLinkToken, disconnectTelegram, getTelegramState, handleUpdate, sendDueTelegramReminders, sendTelegramTest, setTelegramReminder,
+  createLinkToken, disconnectTelegram, getTelegramState, sendDueTelegramReminders, sendTelegramTest, setTelegramReminder,
 } from "@/lib/services/telegram";
+import { handleUpdate } from "@/lib/services/telegram-bot";
+import { addTodo, deleteTodo, listOpenTodos, setTodoDone } from "@/lib/services/todos";
 import { TelegramError, type TelegramApi, type TelegramUpdate } from "@/lib/telegram";
 import { AppError } from "@/lib/services/errors";
 import { at, client, db, makeUser } from "./helpers";
@@ -16,15 +18,15 @@ afterAll(async () => {
 const WED = "2026-10-21T10:00:00Z"; // Wednesday, week 1
 const AT_2330 = new Date("2026-10-21T15:30:00Z"); // 23:30 in Kuala Lumpur
 
-interface Sent { chatId: string; text: string; keyboard?: { text: string; callback_data: string }[][]; edited?: number }
+interface Sent { chatId: string; text: string; forceReply?: boolean; keyboard?: { text: string; callback_data: string }[][]; edited?: number }
 function fakeApi(opts: { failSend?: (chatId: string) => Error | null } = {}) {
   const sent: Sent[] = [];
   const answers: { id: string; text?: string }[] = [];
   const api: TelegramApi = {
-    async sendMessage(chatId, text, keyboard) {
+    async sendMessage(chatId, text, keyboard, forceReply) {
       const err = opts.failSend?.(chatId);
       if (err) throw err;
-      sent.push({ chatId, text, keyboard });
+      sent.push({ chatId, text, keyboard, forceReply });
     },
     async editMessage(chatId, messageId, text, keyboard) {
       sent.push({ chatId, text, keyboard, edited: messageId });
@@ -248,5 +250,257 @@ describe("scheduled Telegram reminders", () => {
     await sendDueTelegramReminders(db, new Date("2026-10-21T15:45:00Z"), good.api);
     expect(good.to(String(c.chat))).toHaveLength(1); // the failed attempt didn't use up the day
     expect(good.to(String(blocked.chat))).toHaveLength(0);
+  });
+});
+
+describe("editing from Telegram", () => {
+  const lastText = (bot: ReturnType<typeof fakeApi>, chat: number) => bot.to(String(chat)).at(-1)!.text;
+
+  it("/add creates a daily task (default every day, or the given days) that shows up on the website", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "/add Walk 20 min"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/add Call family sat sun"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/add Sun cream weekdays"), new Date(WED));
+    const t = (await getPlanData(c.ctx))!.template;
+    const by = (title: string) => t.dailyTasks.find((d) => d.title === title)!;
+    expect(by("Walk 20 min").weekdays).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(by("Call family").weekdays).toEqual([6, 7]);
+    expect(by("Sun cream").weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(by("Walk 20 min").anytime).toBe(true);
+    expect(lastText(bot, c.chat)).toMatch(/Added “Sun cream” \(Mon, Tue, Wed, Thu, Fri\)/);
+
+    await handleUpdate(db, bot.api, say(c.chat, "/add"), new Date(WED)); // nothing to add
+    expect(lastText(bot, c.chat)).toMatch(/Tell me what to add/);
+    // and the new task is tickable
+    await handleUpdate(db, bot.api, tap(c.chat, `t:${by("Walk 20 min").key}:2026-10-21`), new Date(WED));
+    expect((await getPlanData(c.ctx))!.checks).toContain(`daily:${by("Walk 20 min").key}|2026-10-21`);
+  });
+
+  it("/rename: pick a task, then reply with the new name", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "/rename"), new Date(WED));
+    const pick = bot.to(String(c.chat)).at(-1)!.keyboard!.flat().find((b) => b.text.includes("Projects"))!;
+    expect(pick.callback_data).toBe("n:projects");
+    await handleUpdate(db, bot.api, tap(c.chat, pick.callback_data), new Date(WED));
+    const prompt = bot.to(String(c.chat)).at(-1)!;
+    expect(prompt.forceReply).toBe(true);
+    expect(prompt.text).toContain("[#projects]");
+
+    const reply: TelegramUpdate = { update_id: uid(), message: { message_id: uid(), chat: { id: c.chat, type: "private" }, text: "Side project — 45 min", reply_to_message: { text: prompt.text } } };
+    await handleUpdate(db, bot.api, reply, new Date(WED));
+    expect((await getPlanData(c.ctx))!.template.dailyTasks.find((d) => d.key === "projects")!.title).toBe("Side project — 45 min");
+    expect(lastText(bot, c.chat)).toMatch(/Renamed to “Side project — 45 min”/);
+
+    // an old prompt for a task that has since been removed says so
+    await handleUpdate(db, bot.api, tap(c.chat, "ry:projects"), new Date(WED));
+    await handleUpdate(db, bot.api, reply, new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/no longer exists/);
+  });
+
+  it("/remove asks first; removing keeps the task's timeline blocks and stops it counting", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, tap(c.chat, "t:german:2026-10-21"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/remove"), new Date(WED));
+    const pick = bot.to(String(c.chat)).at(-1)!.keyboard!.flat().find((b) => b.text.includes("German"))!;
+    await handleUpdate(db, bot.api, tap(c.chat, pick.callback_data, 5), new Date(WED));
+    const confirm = bot.sent.find((m) => m.edited === 5)!;
+    expect(confirm.text).toMatch(/Remove “German — 45 min” from your plan\?/);
+    expect((await getPlanData(c.ctx))!.template.dailyTasks.some((d) => d.key === "german")).toBe(true); // not yet
+
+    await handleUpdate(db, bot.api, tap(c.chat, "rn", 5), new Date(WED));
+    expect(bot.sent.filter((m) => m.edited === 5).at(-1)!.text).toBe("Cancelled.");
+    expect((await getPlanData(c.ctx))!.template.dailyTasks.some((d) => d.key === "german")).toBe(true);
+
+    await handleUpdate(db, bot.api, tap(c.chat, "ry:german", 5), new Date(WED));
+    const t = (await getPlanData(c.ctx))!.template;
+    expect(t.dailyTasks.some((d) => d.key === "german")).toBe(false);
+    const blocks = t.timeline.flatMap((d) => d.blocks);
+    expect(blocks.some((b) => b.taskKey === "german")).toBe(false);
+    expect(blocks.filter((b) => b.title === "German — 45 min").length).toBeGreaterThan(0); // the time slots stay, as plain blocks
+  });
+
+  it("/untick, /books, /weight, /run, /week and /timeline", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "/untick"), new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/Nothing is ticked/);
+    await handleUpdate(db, bot.api, tap(c.chat, "t:dl:2026-10-21"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/untick"), new Date(WED));
+    const un = bot.to(String(c.chat)).at(-1)!.keyboard!.flat()[0]!;
+    expect(un.callback_data).toBe("u:dl:2026-10-21");
+    await handleUpdate(db, bot.api, tap(c.chat, un.callback_data), new Date(WED));
+    expect((await getPlanData(c.ctx))!.checks).toEqual([]);
+
+    await handleUpdate(db, bot.api, say(c.chat, "/books"), new Date(WED));
+    const book = bot.to(String(c.chat)).at(-1)!.keyboard!.flat()[0]!;
+    expect(book.callback_data).toBe("b:b1");
+    await handleUpdate(db, bot.api, tap(c.chat, book.callback_data), new Date(WED));
+    expect((await getPlanData(c.ctx))!.checks).toContain("book:b1|once");
+
+    await handleUpdate(db, bot.api, say(c.chat, "/weight 70,5"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/run 15"), new Date(WED));
+    expect((await getPlanData(c.ctx))!.metrics).toEqual([{ week: 1, weightKg: 70.5, longRunKm: 15 }]);
+    await handleUpdate(db, bot.api, say(c.chat, "/weight heavy"), new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/Send your weight/);
+    await handleUpdate(db, bot.api, say(c.chat, "/weight 5"), new Date(WED)); // the website's range check applies
+    expect(lastText(bot, c.chat)).toMatch(/between 30 and 250/);
+
+    await handleUpdate(db, bot.api, say(c.chat, "/week"), new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/Week 1 · Oct 19 – Oct 25\n0 of \d+ done/);
+    expect(lastText(bot, c.chat)).toMatch(/Wed .* 0\/9 {2}← today/);
+    expect(lastText(bot, c.chat)).toMatch(/Books finished: 1 of 3/);
+    await handleUpdate(db, bot.api, say(c.chat, "/timeline"), new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/14:00–16:00 {2}WIG3007 Special Topics in Multimedia/);
+    expect(lastText(bot, c.chat)).toMatch(/☐ 19:00–20:00 {2}Exercise \(Strength\)/);
+  });
+
+  it("/time, /on and /off change the reminder", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "/time 22:15"), new Date(WED));
+    expect(await getTelegramState(c.ctx)).toEqual({ linked: true, enabled: true, time: "22:15" });
+    await handleUpdate(db, bot.api, say(c.chat, "/off"), new Date(WED));
+    expect((await getTelegramState(c.ctx)).enabled).toBe(false);
+    await handleUpdate(db, bot.api, say(c.chat, "/time 7.05"), new Date(WED));
+    expect((await getTelegramState(c.ctx)).time).toBe("07:05");
+    await handleUpdate(db, bot.api, say(c.chat, "/on"), new Date(WED));
+    expect(await getTelegramState(c.ctx)).toEqual({ linked: true, enabled: true, time: "07:05" });
+    await handleUpdate(db, bot.api, say(c.chat, "/time soon"), new Date(WED));
+    expect(lastText(bot, c.chat)).toMatch(/Send the time like this/);
+  });
+
+  it("edits only ever touch the plan of the account the chat belongs to", async () => {
+    const a = await connected();
+    const b = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(a.chat, "/add Only mine"), new Date(WED));
+    expect((await getPlanData(a.ctx))!.template.dailyTasks.some((d) => d.title === "Only mine")).toBe(true);
+    expect((await getPlanData(b.ctx))!.template.dailyTasks.some((d) => d.title === "Only mine")).toBe(false);
+    // b presses a button that carries a's task id: it doesn't exist in b's plan
+    const key = (await getPlanData(a.ctx))!.template.dailyTasks.find((d) => d.title === "Only mine")!.key;
+    await handleUpdate(db, bot.api, tap(b.chat, `ry:${key}`), new Date(WED));
+    expect((await getPlanData(a.ctx))!.template.dailyTasks.some((d) => d.key === key)).toBe(true);
+    // strangers can't edit anything
+    const stranger = newChat();
+    await handleUpdate(db, bot.api, say(stranger, "/add Hacked"), new Date(WED));
+    await handleUpdate(db, bot.api, tap(stranger, "ry:projects"), new Date(WED));
+    expect((await getPlanData(a.ctx))!.template.dailyTasks.some((d) => d.key === "projects")).toBe(true);
+    expect((await getPlanData(b.ctx))!.template.dailyTasks.some((d) => d.key === "projects")).toBe(true);
+  });
+});
+
+describe("to-dos", () => {
+  const lastOf = (bot: ReturnType<typeof fakeApi>, chat: number) => bot.to(String(chat)).at(-1)!;
+  const tapOn = (chat: number, data: string, text: string, rows: { text: string; callback_data: string }[][], messageId = 60): TelegramUpdate => ({
+    update_id: uid(),
+    callback_query: { id: `cb${uid()}`, from: { id: chat }, message: { message_id: messageId, chat: { id: chat, type: "private" }, text, reply_markup: { inline_keyboard: rows } }, data },
+  });
+
+  it("any plain message becomes a to-do, with an optional due date, and can be undone", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "buy a SIM card fri"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/todo call mum"), new Date(WED));
+    const open = await listOpenTodos(c.ctx);
+    expect(open.map((t) => [t.title, t.dueDate])).toEqual([["buy a SIM card", "2026-10-23"], ["call mum", null]]);
+    expect(lastOf(bot, c.chat).text).toBe("📝 Added: call mum");
+
+    const added = bot.to(String(c.chat)).find((m) => m.text.startsWith("📝 Added: buy a SIM card"))!;
+    expect(added.text).toContain("due Oct 23");
+    await handleUpdate(db, bot.api, tapOn(c.chat, added.keyboard![0]![0]!.callback_data, added.text, added.keyboard!), new Date(WED));
+    expect((await listOpenTodos(c.ctx)).map((t) => t.title)).toEqual(["call mum"]);
+
+    await handleUpdate(db, bot.api, say(c.chat, "/todo"), new Date(WED));
+    expect(lastOf(bot, c.chat).text).toMatch(/Tell me the to-do/);
+    await handleUpdate(db, bot.api, say(c.chat, "x".repeat(201)), new Date(WED));
+    expect(lastOf(bot, c.chat).text).toMatch(/too long/);
+  });
+
+  it("/todos lists them; ✅ finishes one, undo brings it back, 🗑 deletes", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await handleUpdate(db, bot.api, say(c.chat, "pay rent 2026-10-20"), new Date(WED)); // overdue
+    await handleUpdate(db, bot.api, say(c.chat, "read a paper"), new Date(WED));
+    await handleUpdate(db, bot.api, say(c.chat, "/todos"), new Date(WED));
+    const list = lastOf(bot, c.chat);
+    expect(list.text).toContain("Your to-dos (2):");
+    expect(list.text).toContain("⚠️ pay rent (overdue since Oct 20)");
+    expect(list.keyboard).toHaveLength(2);
+
+    const done = list.keyboard![0]![0]!.callback_data;
+    await handleUpdate(db, bot.api, tapOn(c.chat, done, list.text, list.keyboard!), new Date(WED));
+    const afterDone = bot.sent.find((m) => m.edited === 60)!;
+    expect(afterDone.text).toContain("✅ Done: pay rent");
+    expect(afterDone.keyboard!.flat().map((b) => b.callback_data)).toContain(`tu:${done.slice(3)}`);
+    expect((await listOpenTodos(c.ctx)).map((t) => t.title)).toEqual(["read a paper"]);
+
+    await handleUpdate(db, bot.api, tapOn(c.chat, `tu:${done.slice(3)}`, afterDone.text, afterDone.keyboard!), new Date(WED));
+    expect((await listOpenTodos(c.ctx)).map((t) => t.title)).toEqual(["pay rent", "read a paper"]);
+
+    const del = list.keyboard![1]![1]!.callback_data;
+    await handleUpdate(db, bot.api, tapOn(c.chat, del, list.text, list.keyboard!), new Date(WED));
+    expect((await listOpenTodos(c.ctx)).map((t) => t.title)).toEqual(["pay rent"]);
+    await handleUpdate(db, bot.api, tapOn(c.chat, del, list.text, list.keyboard!), new Date(WED)); // already gone
+    expect(bot.answers.at(-1)!.text).toMatch(/could not be found/);
+  });
+
+  it("the evening message adds to-dos that are due or overdue, and finishing one keeps the other buttons", async () => {
+    const c = await connected();
+    const bot = fakeApi();
+    await addTodo(c.ctx, { title: "Overdue thing", dueDate: "2026-10-19" });
+    await addTodo(c.ctx, { title: "Due today", dueDate: "2026-10-21" });
+    await addTodo(c.ctx, { title: "Later", dueDate: "2026-10-30" });
+    await addTodo(c.ctx, { title: "Someday", dueDate: null });
+    await sendDueTelegramReminders(db, AT_2330, bot.api);
+    const msg = bot.to(String(c.chat))[0]!;
+    expect(msg.text).toContain("To-dos due:");
+    expect(msg.text).toContain("⚠️ Overdue thing");
+    expect(msg.text).toContain("Due today (today)");
+    expect(msg.text).not.toContain("Later");
+    expect(msg.text).not.toContain("Someday");
+    expect(msg.keyboard).toHaveLength(9 + 2);
+
+    const btn = msg.keyboard!.flat().find((b) => b.text.includes("Due today"))!;
+    await handleUpdate(db, bot.api, tapOn(c.chat, btn.callback_data, msg.text, msg.keyboard!), new Date(AT_2330));
+    const after = bot.sent.find((m) => m.edited === 60)!;
+    expect(after.keyboard).toHaveLength(9 + 1 + 1); // the plan's 9, the other to-do, and Undo
+    expect(after.text).toContain("✅ Done: Due today");
+    // tapping a plan task now redraws the whole message, to-dos included
+    await handleUpdate(db, bot.api, tap(c.chat, "t:dl:2026-10-21", 61), new Date(AT_2330));
+    const redraw = bot.sent.find((m) => m.edited === 61)!;
+    expect(redraw.text).toContain("To-dos due:");
+    expect(redraw.text).not.toContain("Due today");
+    expect(redraw.keyboard).toHaveLength(8 + 1);
+  });
+
+  it("a to-do alone is worth a reminder when the plan isn't running", async () => {
+    const u = await makeUser("Asia/Kuala_Lumpur");
+    const ctx = at(u, "2026-10-10T10:00:00Z");
+    const chat = newChat();
+    const { url } = await createLinkToken(ctx, "tracker_bot");
+    await handleUpdate(db, fakeApi().api, say(chat, `/start ${tokenFromUrl(url)}`), new Date("2026-10-10T10:00:00Z"));
+    await addTodo(ctx, { title: "Book flights", dueDate: "2026-10-10" });
+    const bot = fakeApi();
+    await sendDueTelegramReminders(db, new Date("2026-10-10T15:30:00Z"), bot.api); // no plan at all
+    expect(bot.to(String(chat))[0]!.text).toBe("To-dos due:\n• Book flights (today)");
+  });
+
+  it("a to-do belongs to its owner only", async () => {
+    const a = await connected();
+    const b = await connected();
+    const bot = fakeApi();
+    const mine = await addTodo(a.ctx, { title: "Private" });
+    await handleUpdate(db, bot.api, tap(b.chat, `td:${mine.id}`), new Date(WED));
+    await handleUpdate(db, bot.api, tap(b.chat, `tx:${mine.id}`), new Date(WED));
+    expect((await listOpenTodos(a.ctx)).map((t) => t.title)).toEqual(["Private"]);
+    await expect(setTodoDone(b.ctx, mine.id, true)).rejects.toBeInstanceOf(AppError);
+    await expect(deleteTodo(b.ctx, mine.id)).rejects.toBeInstanceOf(AppError);
+    // strangers' plain messages add nothing
+    const stranger = newChat();
+    await handleUpdate(db, bot.api, say(stranger, "sneaky"), new Date(WED));
+    expect((await db.select().from(s.todos).where(eq(s.todos.title, "sneaky")))).toEqual([]);
   });
 });

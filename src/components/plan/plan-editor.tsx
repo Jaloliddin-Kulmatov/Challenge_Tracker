@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { WEEKDAY_LONG, WEEKDAY_SHORT } from "@/lib/core/format";
-import { newId } from "@/lib/plan/content";
+import { newId, removeDailyTask } from "@/lib/plan/content";
 import { fromMin, parseRange, TIME_RE, toMin } from "@/lib/plan/timeline";
 import { BLOCK_KINDS, type DailyTask, type MonthPlan, type PlanContent, type PlanTemplate, type TimelineBlock, type WeekPlan } from "@/lib/plan/types";
 import { cn } from "@/lib/utils";
@@ -105,7 +105,7 @@ export function PlanEditor({ templateKey, title, initial, schedule, edited }: Pr
             index={i}
             task={task}
             onChange={(patch) => update((d) => ({ ...d, dailyTasks: d.dailyTasks.map((x) => (x.key === task.key ? { ...x, ...patch } : x)) }))}
-            onRemove={() => update((d) => ({ ...d, dailyTasks: d.dailyTasks.filter((x) => x.key !== task.key) }))}
+            onRemove={() => update((d) => removeDailyTask(d, task.key))}
           />
         ))}
         <AddButton onClick={() => update((d) => ({ ...d, dailyTasks: [...d.dailyTasks, { key: newId("t"), title: "", weekdays: [1, 2, 3, 4, 5, 6, 7] }] }))}>Add a daily task</AddButton>

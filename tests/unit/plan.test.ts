@@ -5,8 +5,9 @@ import {
   booksCount, checkKey, currentWeek, dailyTasksFor, dayCount, dayNumber, goalsCount, monthCount, monthFor, monthKeyOfWeek, monthRange,
   monthStats, nextMonth, perfectDays, planPhase, validateCheck, weekCount, weekOf, weekRange, weightTarget,
 } from "@/lib/plan/logic";
-import { applyContent, contentOf, newId, parsePlanContent } from "@/lib/plan/content";
+import { addDailyTask, applyContent, contentOf, newId, parseDays, parsePlanContent, removeDailyTask, renameDailyTask } from "@/lib/plan/content";
 import { analyzeWeek, timelineFor, toMin, untimedTasks, validateTimeline } from "@/lib/plan/timeline";
+import { splitDue } from "@/lib/todos";
 
 describe("plan calendar", () => {
   it("starts on a Monday and ends on a Sunday, 19 weeks later", () => {
@@ -391,5 +392,53 @@ describe("analysis of the week", () => {
     expect(w.some((x) => /Thursday: exercise ends at 22:15/.test(x))).toBe(true);
     expect(w.some((x) => /Thursday: “Projects — 30 min” has no time slot/.test(x))).toBe(true);
     expect(w.some((x) => /Friday: only 20 min between waking up and the first class/.test(x))).toBe(true);
+  });
+});
+
+describe("small plan edits", () => {
+  it("understands day words", () => {
+    expect(parseDays(["mon", "wed", "fri"])).toEqual([1, 3, 5]);
+    expect(parseDays(["Weekdays"])).toEqual([1, 2, 3, 4, 5]);
+    expect(parseDays(["weekend"])).toEqual([6, 7]);
+    expect(parseDays(["Saturday", "sun"])).toEqual([6, 7]);
+    expect(parseDays(["daily"])).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(parseDays(["cream"])).toBeNull();
+    expect(parseDays([])).toBeNull();
+  });
+
+  it("adds, renames and removes a daily task, keeping the plan valid", () => {
+    const base = contentOf(T);
+    const added = addDailyTask(base, "  Walk 20 min ", [1, 3]);
+    expect(added.content.dailyTasks.at(-1)).toMatchObject({ key: added.key, title: "Walk 20 min", weekdays: [1, 3], anytime: true });
+    expect(parsePlanContent(added.content, T).ok).toBe(true);
+    expect(untimedTasks(applyContent(T, added.content), "2026-10-19")).toEqual([]); // "anytime": no slot needed
+    const renamed = renameDailyTask(added.content, added.key, "Walk");
+    expect(renamed.dailyTasks.at(-1)!.title).toBe("Walk");
+
+    const removed = removeDailyTask(base, "dl");
+    expect(removed.dailyTasks.some((d) => d.key === "dl")).toBe(false);
+    expect(removed.timeline.flatMap((d) => d.blocks).some((b) => b.taskKey === "dl")).toBe(false);
+    expect(removed.timeline.flatMap((d) => d.blocks).filter((b) => b.title === "DeepLearning.AI course — 60–90 min").length).toBe(6);
+    expect(parsePlanContent(removed, T).ok).toBe(true); // without detaching the blocks this would be refused
+  });
+});
+
+describe("to-do due dates", () => {
+  const WEDNESDAY = "2026-10-21";
+  it("reads a day word, weekday or date from the end of a message", () => {
+    expect(splitDue("buy a SIM card tomorrow", WEDNESDAY)).toEqual({ title: "buy a SIM card", due: "2026-10-22" });
+    expect(splitDue("call mum today", WEDNESDAY)).toEqual({ title: "call mum", due: "2026-10-21" });
+    expect(splitDue("pay rent 2026-11-30", WEDNESDAY)).toEqual({ title: "pay rent", due: "2026-11-30" });
+    expect(splitDue("Laundry fri", WEDNESDAY)).toEqual({ title: "Laundry", due: "2026-10-23" });
+    expect(splitDue("team meeting wed", WEDNESDAY)).toEqual({ title: "team meeting", due: "2026-10-28" }); // never "today" by weekday name
+    expect(splitDue("gym Monday!", WEDNESDAY)).toEqual({ title: "gym", due: "2026-10-26" });
+    expect(splitDue("call dad sun", "2026-10-25")).toEqual({ title: "call dad", due: "2026-11-01" });
+  });
+
+  it("keeps the text when there is no date, or the date word is the whole message", () => {
+    expect(splitDue("buy milk", WEDNESDAY)).toEqual({ title: "buy milk", due: null });
+    expect(splitDue("Friday", WEDNESDAY)).toEqual({ title: "Friday", due: null });
+    expect(splitDue("  spaced   out   tomorrow ", WEDNESDAY)).toEqual({ title: "spaced out", due: "2026-10-22" });
+    expect(splitDue("report 2026-02-30", WEDNESDAY)).toEqual({ title: "report 2026-02-30", due: null }); // not a real date
   });
 });

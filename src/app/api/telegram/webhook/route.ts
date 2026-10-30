@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { getDb } from "@/lib/db/client";
-import { handleUpdate } from "@/lib/services/telegram";
+import { handleUpdate } from "@/lib/services/telegram-bot";
 import { telegramApi, type TelegramUpdate } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";

@@ -47,8 +47,21 @@ Set up once:
 ## Telegram bot (reminders you can tap)
 
 Besides email, the plan page has a **Telegram reminder**: every evening (same time as the email, default 23:30) the bot
-sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). `/today` shows today's
-tasks any time, `/stop` disconnects.
+sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). The bot can also edit
+your plan (`src/lib/services/telegram-bot.ts`):
+
+| Command | What it does |
+|---|---|
+| `/today`, `/timeline`, `/week` | today's tasks as tap-to-tick buttons, today hour by hour, how the week is going |
+| `/untick` | undo a tick |
+| `/add Walk 20 min mon wed fri` | add a daily task (days optional; default every day) |
+| `/rename`, `/remove` | pick a daily task, then reply with the new name / confirm the removal |
+| `/books` | mark a book as finished |
+| `/weight 70.5`, `/run 15` | log this week's weight and long run |
+| `/time 22:30`, `/on`, `/off` | change or switch the reminder |
+| `/stop` | disconnect the chat |
+
+Edits use the same validation as the website's editor; removing a task keeps its timeline slots as plain blocks.
 
 * Connecting: **Connect Telegram** opens the bot with a one-time code (valid 15 minutes, stored hashed, single use);
   pressing *Start* links that chat to your account. A chat can belong to one account only.

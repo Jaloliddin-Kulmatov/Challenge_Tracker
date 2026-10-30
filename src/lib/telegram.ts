@@ -8,7 +8,8 @@ export interface InlineButton {
 export type Keyboard = InlineButton[][];
 
 export interface TelegramApi {
-  sendMessage(chatId: string, text: string, keyboard?: Keyboard): Promise<void>;
+  /** `forceReply` makes Telegram open the reply box, so the next message answers this one. */
+  sendMessage(chatId: string, text: string, keyboard?: Keyboard, forceReply?: boolean): Promise<void>;
   editMessage(chatId: string, messageId: number, text: string, keyboard?: Keyboard): Promise<void>;
   answerCallback(callbackId: string, text?: string): Promise<void>;
 }
@@ -16,7 +17,7 @@ export interface TelegramApi {
 /** The pieces of a Telegram update the bot reads. */
 export interface TelegramUpdate {
   update_id: number;
-  message?: { message_id: number; chat: { id: number; type: string }; from?: { id: number }; text?: string };
+  message?: { message_id: number; chat: { id: number; type: string }; from?: { id: number }; text?: string; reply_to_message?: { text?: string } };
   callback_query?: { id: string; from: { id: number }; message?: { message_id: number; chat: { id: number; type: string } }; data?: string };
 }
 
@@ -51,8 +52,9 @@ async function call(method: string, body: Record<string, unknown>): Promise<unkn
 }
 
 export const telegramApi: TelegramApi = {
-  async sendMessage(chatId, text, keyboard) {
-    await call("sendMessage", { chat_id: chatId, text, ...(keyboard && { reply_markup: { inline_keyboard: keyboard } }) });
+  async sendMessage(chatId, text, keyboard, forceReply) {
+    const markup = forceReply ? { force_reply: true } : keyboard && keyboard.length > 0 ? { inline_keyboard: keyboard } : undefined;
+    await call("sendMessage", { chat_id: chatId, text, ...(markup && { reply_markup: markup }) });
   },
   async editMessage(chatId, messageId, text, keyboard) {
     await call("editMessageText", { chat_id: chatId, message_id: messageId, text, reply_markup: { inline_keyboard: keyboard ?? [] } });
@@ -66,6 +68,25 @@ export const telegramApi: TelegramApi = {
 export async function ensureWebhook(appUrl: string): Promise<void> {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!secret) return;
+  // the menu that opens when typing "/"
+  await call("setMyCommands", {
+    commands: [
+      { command: "today", description: "Today's tasks (tap to tick)" },
+      { command: "timeline", description: "Today hour by hour" },
+      { command: "week", description: "How this week is going" },
+      { command: "untick", description: "Undo a tick" },
+      { command: "add", description: "Add a daily task" },
+      { command: "rename", description: "Rename a daily task" },
+      { command: "remove", description: "Remove a daily task" },
+      { command: "books", description: "Mark a book as finished" },
+      { command: "weight", description: "Log this week's weight" },
+      { command: "run", description: "Log this week's long run" },
+      { command: "time", description: "Change the reminder time" },
+      { command: "on", description: "Turn reminders on" },
+      { command: "off", description: "Turn reminders off" },
+      { command: "help", description: "What I can do" },
+    ],
+  });
   await call("setWebhook", {
     url: `${appUrl.replace(/\/$/, "")}/api/telegram/webhook`,
     secret_token: secret,

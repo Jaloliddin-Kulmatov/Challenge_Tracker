@@ -14,8 +14,6 @@ import { badState, invalid, notFound } from "./errors";
 export interface MetricView {
   week: number;
   weightKg: number | null;
-  youtubeSubs: number | null;
-  instagramSubs: number | null;
   longRunKm: number | null;
 }
 
@@ -69,7 +67,7 @@ export async function getPlanData(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY): Pro
     endDate: plan.endDate,
     checks: checks.map((c) => checkKey(c.taskKey, c.periodKey)),
     metrics: metrics
-      .map((m) => ({ week: m.week, weightKg: num(m.weightKg), youtubeSubs: m.youtubeSubs, instagramSubs: m.instagramSubs, longRunKm: num(m.longRunKm) }))
+      .map((m) => ({ week: m.week, weightKg: num(m.weightKg), longRunKm: num(m.longRunKm) }))
       .sort((a, b) => a.week - b.week),
   };
 }
@@ -116,8 +114,6 @@ const metricsSchema = z.object({
   templateKey: z.string().max(60).default(DEFAULT_PLAN_KEY),
   period: z.string().max(20),
   weightKg: z.number().finite().min(30, "Weight must be between 30 and 250 kg.").max(250, "Weight must be between 30 and 250 kg.").nullable().optional(),
-  youtubeSubs: z.number().int("Use whole numbers for subscribers.").min(0).max(100_000_000).nullable().optional(),
-  instagramSubs: z.number().int("Use whole numbers for subscribers.").min(0).max(100_000_000).nullable().optional(),
   longRunKm: z.number().finite().min(0).max(200, "That long run is too far to be true.").nullable().optional(),
 });
 
@@ -136,8 +132,6 @@ export async function saveMetrics(ctx: Ctx, raw: unknown): Promise<void> {
 
   const values: Partial<typeof s.planMetrics.$inferInsert> = {};
   if (input.weightKg !== undefined) values.weightKg = input.weightKg === null ? null : round1(input.weightKg).toFixed(1);
-  if (input.youtubeSubs !== undefined) values.youtubeSubs = input.youtubeSubs;
-  if (input.instagramSubs !== undefined) values.instagramSubs = input.instagramSubs;
   if (input.longRunKm !== undefined) values.longRunKm = input.longRunKm === null ? null : round1(input.longRunKm).toFixed(1);
   if (Object.keys(values).length === 0) throw invalid("Enter at least one number.");
 

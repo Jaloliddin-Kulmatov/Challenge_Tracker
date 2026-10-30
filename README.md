@@ -24,6 +24,47 @@ Vitest + Playwright.
 | Lifecycle | Edit duration, pause/resume (end date shifts), start in the future, finish early, results review, archive, delete |
 | Extras | Milestones (auto 25/50/75/100 % + custom), achievements, read-only share links (revocable/expiring), JSON data export, notification preferences |
 
+## Email reminders
+
+The plan page has a one-tap **Evening email reminder** (default 23:30, in your own time zone): it emails what is still
+unticked today, once a day, and stays quiet when everything is ticked.
+
+How it works: a scheduler calls `POST /api/cron/reminders` every 15 minutes with `Authorization: Bearer $CRON_SECRET`
+(`.github/workflows/reminders.yml`; Vercel Hobby crons only run once a day, GitHub Actions is free and every 15 minutes).
+The endpoint sends every reminder that is due (from the chosen time for 3 hours, so a late run still catches up) and is
+idempotent: `reminder_log` has one row per user per local day, claimed before sending.
+
+Set up once:
+
+1. Create a [Resend](https://resend.com) account and an API key. Without a verified domain, Resend only delivers to
+   your own account email, which is enough for a personal tracker.
+2. Vercel → Settings → Environment Variables: `RESEND_API_KEY`, `CRON_SECRET` (any long random string) and optionally
+   `EMAIL_FROM`; redeploy.
+3. GitHub → Settings → Secrets and variables → Actions: `CRON_SECRET` (same value) and `APP_URL`
+   (e.g. `https://challenge-tracker-bay.vercel.app`).
+4. On the plan page switch the reminder on and press **Send me a test email**.
+
+## Telegram bot (reminders you can tap)
+
+Besides email, the plan page has a **Telegram reminder**: every evening (same time as the email, default 23:30) the bot
+sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). `/today` shows today's
+tasks any time, `/stop` disconnects.
+
+* Connecting: **Connect Telegram** opens the bot with a one-time code (valid 15 minutes, stored hashed, single use);
+  pressing *Start* links that chat to your account. A chat can belong to one account only.
+* Taps use exactly the same rules as ticking on the website (your own plan, valid task, not in the future).
+* `POST /api/telegram/webhook` only accepts calls carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it in
+  `X-Telegram-Bot-Api-Secret-Token`); the 15-minute cron (and *Connect Telegram*) registers the webhook, so there is no
+  manual `setWebhook` step. If someone blocks the bot, the link is removed automatically.
+
+Set up once:
+
+1. In Telegram open **@BotFather** → `/newbot` → pick a name and a username ending in `bot`. Copy the token.
+2. Vercel → Environment Variables: `TELEGRAM_BOT_TOKEN` (the token), `TELEGRAM_BOT_USERNAME` (without the @) and
+   `TELEGRAM_WEBHOOK_SECRET` (any random string of letters, digits, `_` or `-`); redeploy. Keep `CRON_SECRET` and the
+   GitHub secrets from *Email reminders* – the same schedule sends the Telegram messages.
+3. On the plan page press **Connect Telegram**, then **Start** in the chat. **Send me today's tasks now** is the test button.
+
 ## Install on your phone (PWA)
 
 The app is installable: `src/app/manifest.ts` (standalone, opens on `/plan`, themed icons incl. a maskable one in
@@ -38,7 +79,7 @@ shows `public/offline.html` when the connection drops) and an install prompt (`s
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,
-today's checklist (9 things Mon–Sat, a short rest-day list on Sunday), monthly goals (this month + next), a card for each of
+today as an hour-by-hour timeline (classes from the timetable + study, meals, exercise at 19:00; 9 ticks Mon–Sat, a short rest-day list on Sunday; also available as a plain checklist), monthly goals (this month + next), a card for each of
 the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
 
 * The plan's *default content* lives in code (`src/lib/plan/malaysia-semester4.ts`). Everything the user edits on
@@ -46,7 +87,8 @@ the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and th
   tasks) is stored as one validated JSON document in `plans.content` and laid over the default
   (`src/lib/plan/content.ts`); items keep their ids, so ticks follow a renamed task and a removed task's ticks stop
   counting. Ticks (`plan_checks`) and the Sunday numbers (`plan_metrics`) are stored separately, one `plans` row per user.
-* Monthly numbers (YouTube, Instagram, weight, long run, books finished) are compared with each month's targets; the
+* The timeline (`src/lib/plan/timeline.ts`) merges the fixed class timetable with editable blocks, checks that blocks don't overlap, and drives the *Analysis* section (hours per kind of activity per day, sleep, late workouts, tasks without a slot).
+* Monthly numbers (weight, long run, books finished) are compared with each month's targets; the
   weight target is a straight line from the first logged weight to the goal unless a month sets its own.
 * Rules (`src/lib/plan/logic.ts`): daily ticks only for today or earlier days and only on days a task applies; weekly
   goals only once the week has started; week-specific tasks, monthly results and goals may be ticked any time.

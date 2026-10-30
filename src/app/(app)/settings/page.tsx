@@ -1,3 +1,4 @@
+import { emailConfigured } from "@/lib/email";
 import type { Metadata } from "next";
 import { AccountActions, NotificationsForm, ProfileForm } from "@/components/settings-forms";
 import { InstallCard } from "@/components/pwa";
@@ -16,7 +17,7 @@ export default async function SettingsPage() {
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
       <InstallCard />
       <ProfileForm name={user.name} email={user.email} timezone={user.timezone} zones={zones} />
-      <NotificationsForm prefs={prefs} />
+      <NotificationsForm prefs={prefs} emailReady={emailConfigured()} />
       <AccountActions />
     </div>
   );

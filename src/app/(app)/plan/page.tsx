@@ -4,7 +4,11 @@ import { StartPlan } from "@/components/plan/start-plan";
 import { requireCtx } from "@/lib/auth/session";
 import { MALAYSIA_SEM4 } from "@/lib/plan/malaysia-semester4";
 import { dailyTasksFor } from "@/lib/plan/logic";
+import { emailConfigured } from "@/lib/email";
+import { telegramConfigured } from "@/lib/telegram";
+import { getTelegramState } from "@/lib/services/telegram";
 import { getPlanData } from "@/lib/services/plan";
+import { getNotificationPrefs, getUserEmail } from "@/lib/services/profile";
 import { todayOf } from "@/lib/services/context";
 
 export const metadata: Metadata = { title: "My plan" };
@@ -22,5 +26,13 @@ export default async function PlanPage() {
       />
     );
   }
-  return <PlanView template={data.template} today={todayOf(ctx)} initialChecks={data.checks} initialMetrics={data.metrics} />;
+  const [prefs, email, tg] = await Promise.all([getNotificationPrefs(ctx), getUserEmail(ctx), getTelegramState(ctx)]);
+  const reminder = {
+    enabled: prefs.dailyReminderEnabled && prefs.channel === "email",
+    // the plan's reminder defaults to the evening, not the 08:00 default of the general reminders
+    time: prefs.dailyReminderEnabled || tg.enabled ? prefs.reminderTime : "23:30",
+    email,
+    configured: emailConfigured(),
+  };
+  return <PlanView template={data.template} today={todayOf(ctx)} initialChecks={data.checks} initialMetrics={data.metrics} reminder={reminder} telegram={{ configured: telegramConfigured(), ...tg }} />;
 }

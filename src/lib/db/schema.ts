@@ -114,6 +114,8 @@ export const notificationPreferences = pgTable(
     reminderTime: text().notNull().default("08:00"),
     weeklySummaryEnabled: boolean().notNull().default(false),
     channel: text().notNull().default("email"),
+    /** Reminders to the linked Telegram chat (independent of the email channel); sent at `reminderTime`. */
+    telegramEnabled: boolean("telegram_enabled").notNull().default(false),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
   (t) => [
@@ -382,6 +384,45 @@ export const planMetrics = pgTable(
     check("pm_subs", sql`(${t.youtubeSubs} is null or ${t.youtubeSubs} between 0 and 100000000) and (${t.instagramSubs} is null or ${t.instagramSubs} between 0 and 100000000)`),
     check("pm_run", sql`${t.longRunKm} is null or ${t.longRunKm} between 0 and 200`),
   ],
+);
+
+/**
+ * One row per reminder actually sent (or being sent): the unique key is what makes the 15-minute cron safe –
+ * whoever inserts the row first sends the email, everyone else sees a conflict and skips.
+ */
+export const reminderLog = pgTable(
+  "reminder_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    kind: text().notNull(),
+    /** The user's local calendar date the reminder is for. */
+    localDate: day("local_date").notNull(),
+    sentAt: ts("sent_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("reminder_log_uq").on(t.userId, t.kind, t.localDate)],
+);
+
+/** A user's Telegram chat (one per user, and a chat belongs to one user). `chat_id` is Telegram's number as text. */
+export const telegramLinks = pgTable(
+  "telegram_links",
+  {
+    userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+    chatId: text("chat_id").notNull(),
+    linkedAt: ts("linked_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("telegram_links_chat_uq").on(t.chatId)],
+);
+
+/** One-time codes behind the "Connect Telegram" link. Only the SHA-256 of the code is stored. */
+export const telegramLinkTokens = pgTable(
+  "telegram_link_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: ts("expires_at").notNull(),
+  },
+  (t) => [index("telegram_link_tokens_user_idx").on(t.userId)],
 );
 
 export type PlanRow = typeof plans.$inferSelect;

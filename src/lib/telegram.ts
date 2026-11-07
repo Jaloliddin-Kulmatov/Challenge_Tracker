@@ -69,39 +69,55 @@ export const telegramApi: TelegramApi = {
   },
 };
 
-/** Point Telegram at this app. Idempotent, so it is safe to call on every cron run and after connecting. */
+/**
+ * Point Telegram at this app. Idempotent, so it is safe to call on every cron run and after connecting.
+ * The webhook is registered first and its failure is reported; the bot's description and "/" menu are nice to have,
+ * so a problem with them is logged and never stops the bot from receiving messages.
+ */
 export async function ensureWebhook(appUrl: string): Promise<void> {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!secret) return;
-  await call("setMyShortDescription", { short_description: "Your daily plan and to-do list: tick tasks, add to-dos, get an evening reminder." });
-  await call("setMyDescription", {
-    description:
-      "Your daily plan and to-do list in Telegram.\n\n• Just send me a message to add a to-do (add a day like “fri” or “tomorrow” for a due date)\n• Every evening I send what you haven't ticked: tap a task to tick it\n• /today, /todos, /week, /add and more\n\nConnect me from the plan page on the website.",
-  });
-  // the menu that opens when typing "/"
-  await call("setMyCommands", {
-    commands: [
-      { command: "todos", description: "Your to-do list" },
-      { command: "todo", description: "Add a to-do (or just send me a message)" },
-      { command: "today", description: "Today's tasks (tap to tick)" },
-      { command: "timeline", description: "Today hour by hour" },
-      { command: "week", description: "How this week is going" },
-      { command: "untick", description: "Undo a tick" },
-      { command: "add", description: "Add a daily task" },
-      { command: "rename", description: "Rename a daily task" },
-      { command: "remove", description: "Remove a daily task" },
-      { command: "books", description: "Mark a book as finished" },
-      { command: "weight", description: "Log this week's weight" },
-      { command: "run", description: "Log this week's long run" },
-      { command: "time", description: "Change the reminder time" },
-      { command: "on", description: "Turn reminders on" },
-      { command: "off", description: "Turn reminders off" },
-      { command: "help", description: "What I can do" },
-    ],
-  });
   await call("setWebhook", {
     url: `${appUrl.replace(/\/$/, "")}/api/telegram/webhook`,
     secret_token: secret,
     allowed_updates: ["message", "callback_query"],
   });
+
+  const extras: [string, Record<string, unknown>][] = [
+    ["setMyShortDescription", { short_description: "Your daily plan and to-do list: tick tasks, add to-dos, get an evening reminder." }],
+    [
+      "setMyDescription",
+      {
+        description:
+          "Your daily plan and to-do list in Telegram.\n\n• Just send me a message to add a to-do (add a day like “fri” or “tomorrow” for a due date)\n• Every evening I send what you haven't ticked: tap a task to tick it\n• /today, /todos, /week, /add and more\n\nConnect me from the plan page on the website.",
+      },
+    ],
+    // the menu that opens when typing "/"
+    [
+      "setMyCommands",
+      {
+        commands: [
+          { command: "todos", description: "Your to-do list" },
+          { command: "todo", description: "Add a to-do (or just send me a message)" },
+          { command: "today", description: "Today's tasks (tap to tick)" },
+          { command: "timeline", description: "Today hour by hour" },
+          { command: "week", description: "How this week is going" },
+          { command: "untick", description: "Undo a tick" },
+          { command: "add", description: "Add a daily task" },
+          { command: "rename", description: "Rename a daily task" },
+          { command: "remove", description: "Remove a daily task" },
+          { command: "books", description: "Mark a book as finished" },
+          { command: "weight", description: "Log this week's weight" },
+          { command: "run", description: "Log this week's long run" },
+          { command: "time", description: "Change the reminder time" },
+          { command: "on", description: "Turn reminders on" },
+          { command: "off", description: "Turn reminders off" },
+          { command: "help", description: "What I can do" },
+        ],
+      },
+    ],
+  ];
+  for (const [method, body] of extras) {
+    await call(method, body).catch((err) => console.error("[telegram setup]", method, err instanceof Error ? err.message : err));
+  }
 }

@@ -22,7 +22,11 @@ export const connectTelegramAction = async () =>
   run(
     async (ctx) => {
       if (!telegramConfigured()) throw badState("Telegram isn't set up on this server yet.");
-      await ensureWebhook(authBaseUrl()).catch((err) => console.error("[telegram webhook]", err instanceof Error ? err.message : err));
+      // if Telegram refuses (wrong token, wrong secret…) say so now instead of leaving a bot that silently never answers
+      await ensureWebhook(authBaseUrl()).catch((err) => {
+        console.error("[telegram webhook]", err instanceof Error ? err.message : err);
+        throw badState(`Telegram refused the setup. ${err instanceof Error ? err.message : ""} Check TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in Vercel and redeploy.`.trim());
+      });
       return telegram.createLinkToken(ctx, botUsername());
     },
     { revalidate: false },

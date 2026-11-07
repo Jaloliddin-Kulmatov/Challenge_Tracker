@@ -33,9 +33,9 @@ test("start the plan, tick today's tasks, and find them again after reloading an
   await expect(page.getByRole("heading", { name: "Semester 4 · Malaysia", level: 1 })).toBeVisible();
   await expect(page.getByText("Day 3 / 133")).toBeVisible();
 
-  // ---- today (a Wednesday): 9 tasks, exercise at 19:00 ----------------------------------------
+  // ---- today (a Wednesday): 8 tasks, exercise at 19:00 ----------------------------------------
   await expect(today(page).getByText("Today", { exact: true })).toBeVisible();
-  await expect(today(page).getByText("0 / 9")).toBeVisible();
+  await expect(today(page).getByText("0 / 8")).toBeVisible();
   const exercise = today(page).getByRole("checkbox", { name: /Exercise/ });
   await expect(exercise).toContainText("19:00");
   await expect(exercise).toContainText("Strength");
@@ -44,19 +44,19 @@ test("start the plan, tick today's tasks, and find them again after reloading an
   await exercise.click();
   await expect(exercise).toHaveAttribute("aria-checked", "true");
   await today(page).getByRole("checkbox", { name: /German/ }).click();
-  await expect(today(page).getByText("2 / 9")).toBeVisible();
+  await expect(today(page).getByText("2 / 8")).toBeVisible();
 
   // untick works too
   await today(page).getByRole("checkbox", { name: /German/ }).click();
-  await expect(today(page).getByText("1 / 9")).toBeVisible();
+  await expect(today(page).getByText("1 / 8")).toBeVisible();
 
   // ---- yesterday can be filled in; tomorrow can't ----------------------------------------------
   await expect(today(page).getByRole("button", { name: "Next day" })).toBeDisabled();
   await today(page).getByRole("button", { name: "Previous day" }).click();
   await expect(today(page).getByText("Tuesday", { exact: true })).toBeVisible();
-  await expect(today(page).getByText("0 / 8")).toBeVisible(); // no exercise on Tuesdays
+  await expect(today(page).getByText("0 / 7")).toBeVisible(); // no exercise on Tuesdays
   await today(page).getByRole("checkbox", { name: /Projects/ }).click();
-  await expect(today(page).getByText("1 / 8")).toBeVisible();
+  await expect(today(page).getByText("1 / 7")).toBeVisible();
 
   // ---- goals, months, weeks ----------------------------------------------------------------------
   await page.locator("#goals summary").click();
@@ -109,7 +109,7 @@ test("start the plan, tick today's tasks, and find them again after reloading an
   // ---- everything is still there after a reload ------------------------------------------------------------
   await page.reload();
   await expect(today(page).getByRole("checkbox", { name: /Exercise/ })).toHaveAttribute("aria-checked", "true");
-  await expect(today(page).getByText("1 / 9")).toBeVisible();
+  await expect(today(page).getByText("1 / 8")).toBeVisible();
   await page.locator("#goals summary").click();
   await expect(page.locator("#goals").getByText("1 of 10 achieved")).toBeVisible();
   await expect(page.locator("#month").getByRole("checkbox", { name: "DAAD sent" })).toHaveAttribute("aria-checked", "true");
@@ -157,7 +157,7 @@ test("edit the plan: change a goal, add a daily task and a book, finish a book, 
 
   await expect(page).toHaveURL(/\/plan$/);
   await expect(today(page).getByRole("checkbox", { name: /Walk 20 minutes/ })).toBeVisible();
-  await expect(today(page).getByText("0 / 10")).toBeVisible();
+  await expect(today(page).getByText("0 / 9")).toBeVisible();
   await page.locator("#goals summary").click();
   await expect(page.locator("#goals").getByText("A+ in all 6 courses and top 10%")).toBeVisible();
   await expect(page.locator("#goals").getByRole("checkbox", { name: "Deep Work" })).toHaveAttribute("aria-checked", "true"); // kept its tick
@@ -196,7 +196,7 @@ test("a bad edit is refused with a message, and reset brings the original plan b
   await expect(page).toHaveURL(/\/plan$/);
   await expect(today(page).getByRole("checkbox", { name: /Walk 20 minutes/ })).toHaveCount(0);
   await expect(today(page).getByRole("checkbox", { name: /Exercise/ })).toBeVisible();
-  await expect(today(page).getByText("0 / 9")).toBeVisible();
+  await expect(today(page).getByText("0 / 8")).toBeVisible();
 });
 
 test("the evening reminder can be switched on and stays on; without an email provider the page says so", async ({ page }, info) => {
@@ -240,7 +240,7 @@ test("today is an hour-by-hour timeline with ticks, there is an analysis of the 
   const workout = day.getByRole("checkbox", { name: /Exercise/ });
   await expect(workout).toContainText("19:00–20:00");
   await workout.click();
-  await expect(day.getByText("1 / 9")).toBeVisible();
+  await expect(day.getByText("1 / 8")).toBeVisible();
   await expect(day.getByRole("checkbox", { name: /Talk to 1 new person/ })).toBeVisible(); // "any time" tasks sit below
 
   await day.getByRole("button", { name: "Checklist" }).click();
@@ -259,6 +259,8 @@ test("today is an hour-by-hour timeline with ticks, there is an analysis of the 
   await page.getByText("Wednesday", { exact: true }).click();
   await page.getByRole("button", { name: "Add a block" }).first().click();
   await page.getByLabel(/Wednesday block \d+ title/).last().fill("Late tea");
+  await page.getByLabel(/Wednesday block \d+ start/).last().fill("19:30"); // in the middle of the 19:00 workout
+  await page.getByLabel(/Wednesday block \d+ end/).last().fill("19:45");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText(/“Late tea” overlap|overlap/);
 });
@@ -305,7 +307,7 @@ test("a tick that fails to save is undone and reported – never shown as done",
   await german.click();
   await expect(page.getByText(/Couldn't save that tick/)).toBeVisible();
   await expect(german).toHaveAttribute("aria-checked", "false");
-  await expect(today(page).getByText("0 / 9")).toBeVisible();
+  await expect(today(page).getByText("0 / 8")).toBeVisible();
 
   // and once the network is back it works
   await page.unroute("**/plan");

@@ -113,11 +113,8 @@ export interface DayAnalysis {
   /** Minutes per kind of activity; gaps in the awake window that nothing is planned in count as rest (free time). */
   minutes: Record<Bucket, number>;
   wake: string;
-  /** Lights out (start of the sleep block, 23:30 if there is none). */
-  sleepAt: string;
-  /** Previous night's lights out, and the hours of sleep it gives before this day's wake-up. */
-  prevSleepAt: string;
-  sleepBefore: number;
+  /** When the last block of the day ends (23:30 for a day with no blocks). */
+  end: string;
 }
 
 export interface Insight {
@@ -133,7 +130,7 @@ export interface WeekAnalysis {
   insights: Insight[];
 }
 
-const BUCKETS: Bucket[] = ["class", "study", "exercise", "meal", "travel", "social", "rest", "sleep"];
+const BUCKETS: Bucket[] = ["class", "study", "exercise", "meal", "travel", "social", "rest"];
 const zero = (): Record<Bucket, number> => Object.fromEntries(BUCKETS.map((b) => [b, 0])) as Record<Bucket, number>;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const hrs = (min: number) => `${round1(min / 60)} h`;
@@ -147,19 +144,16 @@ export function analyzeWeek(t: PlanTemplate): WeekAnalysis {
     tasksOn.set(wd, dailyTasksFor(t, date));
   }
 
-  const sleepAtOf = (wd: number) => items.get(wd)!.find((i) => i.kind === "sleep")?.start ?? "23:30";
   const days: DayAnalysis[] = [];
   for (let wd = 1; wd <= 7; wd++) {
     const list = items.get(wd)!;
     const minutes = zero();
     for (const i of list) minutes[i.kind] += toMin(i.end) - toMin(i.start);
     const wake = list[0]?.start ?? "08:00";
-    const sleepAt = sleepAtOf(wd);
-    const awake = Math.max(0, toMin(sleepAt) - toMin(wake));
-    const planned = list.filter((i) => i.kind !== "sleep").reduce((n, i) => n + (Math.min(toMin(i.end), toMin(sleepAt)) - toMin(i.start)), 0);
-    minutes.rest += Math.max(0, awake - planned);
-    const prevSleepAt = sleepAtOf(wd === 1 ? 7 : wd - 1);
-    days.push({ weekday: wd, minutes, wake, sleepAt, prevSleepAt, sleepBefore: round1((24 * 60 - toMin(prevSleepAt) + toMin(wake)) / 60) });
+    const end = list.length > 0 ? fromMin(Math.max(...list.map((i) => toMin(i.end)))) : "23:30";
+    const planned = list.reduce((n, i) => n + (toMin(i.end) - toMin(i.start)), 0);
+    minutes.rest += Math.max(0, toMin(end) - toMin(wake) - planned); // gaps count as free time
+    days.push({ weekday: wd, minutes, wake, end });
   }
 
   const hours = zero();
@@ -172,9 +166,8 @@ export function analyzeWeek(t: PlanTemplate): WeekAnalysis {
     const list = items.get(d.weekday)!;
     const date = dateOfWeekday(t, d.weekday);
     for (const task of untimedTasks(t, date)) insights.push({ level: "warn", weekday: d.weekday, text: `${name(d.weekday)}: “${task.title}” has no time slot.` });
-    if (d.sleepBefore < 7) insights.push({ level: "warn", weekday: d.weekday, text: `${name(d.weekday)}: only ${d.sleepBefore} h of sleep before it (lights out ${d.prevSleepAt}, up at ${d.wake}).` });
     const ex = list.filter((i) => i.kind === "exercise").at(-1);
-    if (ex && toMin(ex.end) > toMin("21:30")) insights.push({ level: "warn", weekday: d.weekday, text: `${name(d.weekday)}: exercise ends at ${ex.end}, late for a 23:30 bedtime.` });
+    if (ex && toMin(ex.end) > toMin("21:30")) insights.push({ level: "warn", weekday: d.weekday, text: `${name(d.weekday)}: exercise ends at ${ex.end}, late in the evening.` });
     const firstClass = list.find((i) => i.kind === "class");
     if (firstClass && toMin(firstClass.start) - toMin(d.wake) < 60) insights.push({ level: "warn", weekday: d.weekday, text: `${name(d.weekday)}: only ${toMin(firstClass.start) - toMin(d.wake)} min between waking up and the first class.` });
     const busy = d.minutes.class + d.minutes.study + d.minutes.exercise;

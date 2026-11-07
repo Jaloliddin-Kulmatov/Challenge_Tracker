@@ -95,7 +95,7 @@ shows `public/offline.html` when the connection drops) and an install prompt (`s
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,
-today as an hour-by-hour timeline (classes from the timetable + study, meals, exercise at 19:00; 9 ticks Mon–Sat, a short rest-day list on Sunday; also available as a plain checklist), monthly goals (this month + next), a card for each of
+today as an hour-by-hour timeline (classes from the timetable + study, meals, exercise at 19:00; 8 ticks Mon–Sat, a short rest-day list on Sunday; also available as a plain checklist), monthly goals (this month + next), a card for each of
 the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
 
 * The plan's *default content* lives in code (`src/lib/plan/malaysia-semester4.ts`). Everything the user edits on

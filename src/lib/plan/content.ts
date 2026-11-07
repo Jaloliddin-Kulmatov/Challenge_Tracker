@@ -106,7 +106,13 @@ export function contentOf(t: PlanTemplate): PlanContent {
 }
 
 /** Things the plan no longer has; edits saved before they were removed are cleaned of them when read. */
-const RETIRED = { goals: ["social-media"], dailyTasks: ["post"], weeklyGoals: ["youtube", "instagram"] };
+const RETIRED = { goals: ["social-media"], dailyTasks: ["post", "sleep"], weeklyGoals: ["youtube", "instagram"] };
+
+/** Default wording that changed; only an exact match is replaced, so the user's own wording is never touched. */
+const REWORDED: Record<string, string> = {
+  "Mon — easy run · Wed — strength · Thu — long run · Sat — gym": "Mon — easy run · Wed — strength · Thu — long run · Sat — run",
+  "Go to the gym": "Get ready for the run",
+};
 
 /** Bring an older saved edit up to date: drop retired items, fill what it predates (the timeline, "anytime"). */
 function upgrade(base: PlanTemplate, c: Partial<PlanContent>): PlanContent {
@@ -115,15 +121,24 @@ function upgrade(base: PlanTemplate, c: Partial<PlanContent>): PlanContent {
     goals: (c.goals ?? base.goals).filter((g) => !RETIRED.goals.includes(g.key)),
     dailyTasks: (c.dailyTasks ?? base.dailyTasks)
       .filter((d) => !RETIRED.dailyTasks.includes(d.key))
-      .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d)),
-    weeklyGoals: (c.weeklyGoals ?? base.weeklyGoals).filter((g) => !RETIRED.weeklyGoals.includes(g.key)),
+      .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d))
+      .map((d) => (d.detailByWeekday?.[6] === "Gym" ? { ...d, detailByWeekday: { ...d.detailByWeekday, 6: "Running" } } : d)),
+    weeklyGoals: (c.weeklyGoals ?? base.weeklyGoals)
+      .filter((g) => !RETIRED.weeklyGoals.includes(g.key))
+      .map((g) => (REWORDED[g.target] ? { ...g, target: REWORDED[g.target]! } : g)),
     books: c.books ?? base.books,
     months: (c.months ?? base.months).map((m) => {
       const { youtube: _y, instagram: _i, ...rest } = m as typeof m & { youtube?: number; instagram?: number };
       return rest;
     }),
     weeks: c.weeks ?? base.weeks,
-    timeline: c.timeline ?? base.timeline,
+    timeline: (c.timeline ?? base.timeline).map((day) => ({
+      ...day,
+      blocks: day.blocks
+        // sleep is no longer part of the plan: its task and its blocks go
+        .filter((b) => !(b.taskKey && RETIRED.dailyTasks.includes(b.taskKey)) && (b.kind as string) !== "sleep")
+        .map((b) => (REWORDED[b.title] ? { ...b, title: REWORDED[b.title]!, kind: b.title === "Go to the gym" ? ("rest" as const) : b.kind } : b)),
+    })),
   };
 }
 

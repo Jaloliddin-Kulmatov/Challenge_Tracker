@@ -45,7 +45,7 @@ export interface ScheduleDay {
   classes: ClassSession[];
 }
 
-export const BLOCK_KINDS = ["study", "meal", "exercise", "travel", "social", "rest", "sleep"] as const;
+export const BLOCK_KINDS = ["study", "meal", "exercise", "travel", "social", "rest"] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
 
 /**

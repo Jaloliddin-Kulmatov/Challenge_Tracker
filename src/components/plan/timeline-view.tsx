@@ -21,7 +21,6 @@ export const KIND: Record<Bucket, { label: string; bar: string }> = {
   travel: { label: "Travel", bar: "bg-border" },
   social: { label: "Social", bar: "bg-[#8e6bd9]" },
   rest: { label: "Free time", bar: "bg-surface-2 ring-1 ring-inset ring-border" },
-  sleep: { label: "Sleep", bar: "bg-surface-2 ring-1 ring-inset ring-border" },
 };
 
 const range = (i: Pick<TimelineItem, "start" | "end">) => `${i.start}–${i.end === "24:00" ? "00:00" : i.end}`;
@@ -122,7 +121,7 @@ export function AnalysisCard({ t }: { t: PlanTemplate }) {
     <div className="space-y-3">
       <div>
         <h2 id="analysis-h" className="text-lg font-semibold">Analysis of my week</h2>
-        <p className="text-sm text-muted">Where the hours go on each day, from wake-up to lights out. It updates when you edit the timeline.</p>
+        <p className="text-sm text-muted">Where the hours go on each day, from wake-up to the end of the day. It updates when you edit the timeline.</p>
       </div>
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Legend">
@@ -137,7 +136,7 @@ export function AnalysisCard({ t }: { t: PlanTemplate }) {
               <div key={d.weekday} className="space-y-1">
                 <div className="flex items-baseline justify-between text-sm">
                   <span className="font-semibold">{WEEKDAY_LONG[d.weekday - 1]}</span>
-                  <span className="text-xs text-muted tabular">{d.wake}–{d.sleepAt} · class {hoursText(d.minutes.class)} h · study {hoursText(d.minutes.study)} h · free {hoursText(d.minutes.rest)} h</span>
+                  <span className="text-xs text-muted tabular">{d.wake}–{d.end} · class {hoursText(d.minutes.class)} h · study {hoursText(d.minutes.study)} h · free {hoursText(d.minutes.rest)} h</span>
                 </div>
                 <div role="img" aria-label={`${WEEKDAY_LONG[d.weekday - 1]}: ${order.map((b) => `${KIND[b].label} ${hoursText(d.minutes[b])} hours`).join(", ")}`} className="flex h-3 overflow-hidden rounded-full bg-surface-2">
                   {order.map((b) => (d.minutes[b] > 0 ? <span key={b} className={KIND[b].bar} style={{ width: `${(d.minutes[b] / total) * 100}%` }} /> : null))}

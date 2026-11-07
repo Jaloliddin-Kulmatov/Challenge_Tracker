@@ -9,9 +9,9 @@ const URL = "https://tracker.example.com/";
 describe("reminder email", () => {
   it("lists what is still open today, with the 19:00 workout detail and a link to today", () => {
     const m = composeReminder(T, new Set([checkKey("daily:german", WED)]), WED, URL)!;
-    expect(m.total).toBe(9);
-    expect(m.left).toBe(8);
-    expect(m.subject).toBe("Tick your day: 8 of 9 still open");
+    expect(m.total).toBe(8);
+    expect(m.left).toBe(7);
+    expect(m.subject).toBe("Tick your day: 7 of 8 still open");
     expect(m.text).toContain("Exercise (Strength)");
     expect(m.text).not.toContain("German");
     expect(m.text).toContain("https://tracker.example.com/plan#today");
@@ -46,9 +46,9 @@ describe("Telegram reminder", () => {
   it("lists the open tasks as one button each, whose data ticks that task on that day", () => {
     const m = composeTelegram(T, new Set([checkKey("daily:german", WED)]), WED)!;
     expect(m.text).toContain("Tick your day");
-    expect(m.text).toContain("8 of 9 tasks still open");
+    expect(m.text).toContain("7 of 8 tasks still open");
     expect(m.text).not.toContain("German");
-    expect(m.keyboard).toHaveLength(8);
+    expect(m.keyboard).toHaveLength(7);
     const exercise = m.keyboard.flat().find((b) => b.text.includes("Exercise"))!;
     expect(parseTickData(exercise.callback_data)).toEqual({ taskKey: "daily:exercise", date: WED });
     for (const b of m.keyboard.flat()) expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(64);
@@ -56,7 +56,7 @@ describe("Telegram reminder", () => {
 
   it("says well done when the day is complete, and nothing outside the plan", () => {
     const all = new Set(dailyTasksFor(T, WED).map((d) => checkKey(d.taskKey, WED)));
-    expect(composeTelegram(T, all, WED)).toMatchObject({ keyboard: [], text: expect.stringContaining("All 9 tasks done") });
+    expect(composeTelegram(T, all, WED)).toMatchObject({ keyboard: [], text: expect.stringContaining("All 8 tasks done") });
     expect(composeTelegram(T, new Set(), "2026-10-18")).toBeNull();
   });
 

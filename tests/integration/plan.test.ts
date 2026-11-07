@@ -220,7 +220,7 @@ describe("evening reminder emails", () => {
     await sendDueReminders(db, new Date("2026-10-21T15:45:00Z"), m.send, URL); // the next cron run
     expect(m.to(email)).toHaveLength(1);
     const mail = m.to(email)[0]!;
-    expect(mail.subject).toBe("Tick your day: 8 of 9 still open");
+    expect(mail.subject).toBe("Tick your day: 7 of 8 still open");
     expect(mail.text).not.toContain("German");
 
     await sendDueReminders(db, new Date("2026-10-22T15:30:00Z"), m.send, URL); // next evening: another one

@@ -79,11 +79,11 @@ describe("daily tasks", () => {
     expect(dailyTasksFor(T, "2027-01-21").find((x) => x.taskKey === "daily:exercise")!.detail).toBe("Light runs only");
   });
 
-  it("gives Mon–Sat nine tasks (eight without exercise) and Sunday a short rest-day list", () => {
-    expect(keys(monday)).toHaveLength(9);
-    expect(keys(tuesday)).toHaveLength(8);
-    expect(keys(saturday)).toHaveLength(9);
-    expect(keys(sunday)).toEqual(["nutrition", "german", "reading", "sleep", "weekly-review"]);
+  it("gives Mon–Sat eight tasks (seven without exercise) and Sunday a short rest-day list", () => {
+    expect(keys(monday)).toHaveLength(8);
+    expect(keys(tuesday)).toHaveLength(7);
+    expect(keys(saturday)).toHaveLength(8);
+    expect(keys(sunday)).toEqual(["nutrition", "german", "reading", "weekly-review"]);
   });
 
   it("has German and reading every single day", () => {
@@ -133,9 +133,9 @@ describe("progress counts", () => {
       checkKey("daily:exercise", monday), checkKey("daily:german", monday), checkKey("weekly:dl", "W1"),
       checkKey("wtask:w1t1", "W1"), checkKey("goal:grades", "once"), checkKey("mres:oct:r1", "once"),
     ]);
-    expect(dayCount(T, checks, monday)).toEqual({ done: 2, total: 9 });
-    // week 1: Mon–Sat 9+8+9+9+8+9 = 52, Sunday 5, weekly goals 6, week tasks 3
-    expect(weekCount(T, checks, 1)).toEqual({ done: 4, total: 52 + 5 + 6 + 3 });
+    expect(dayCount(T, checks, monday)).toEqual({ done: 2, total: 8 });
+    // week 1: Mon–Sat 8+7+8+8+7+8 = 46, Sunday 4, weekly goals 6, week tasks 3
+    expect(weekCount(T, checks, 1)).toEqual({ done: 4, total: 46 + 4 + 6 + 3 });
     expect(goalsCount(T, checks)).toEqual({ done: 1, total: 10 });
     expect(monthCount(T, checks, T.months[0]!)).toEqual({ done: 1, total: 3 });
   });
@@ -236,7 +236,7 @@ describe("editing the plan", () => {
     expect(applyContent(T, null)).toBe(T);
     // the old tick of the removed task no longer counts
     const checks = new Set([checkKey("daily:newperson", "2026-10-19"), checkKey("daily:german", "2026-10-19")]);
-    expect(dayCount(t2, checks, "2026-10-19")).toEqual({ done: 1, total: 9 }); // newperson removed, walk added
+    expect(dayCount(t2, checks, "2026-10-19")).toEqual({ done: 1, total: 8 }); // newperson removed, walk added
   });
 
   it("rejects bad edits with a clear message", () => {
@@ -288,12 +288,12 @@ describe("daily timeline", () => {
     expect(at("2026-10-24").filter((i) => i.kind === "class")).toEqual([]);
   });
 
-  it("keeps the evening exercise at 19:00 and lights out at 23:30, and has no early-morning workout", () => {
+  it("keeps the evening exercise at 19:00, every day ends at 23:30, and there is no early-morning workout", () => {
     for (const d of [monday, "2026-10-21", thursday, "2026-10-24"]) {
       expect(at(d).find((i) => i.kind === "exercise")?.start).toBe("19:00");
     }
     expect(at("2026-10-20").some((i) => i.kind === "exercise")).toBe(false);
-    for (let wd = 0; wd < 7; wd++) expect(at(addDays(monday, wd)).find((i) => i.kind === "sleep")).toMatchObject({ start: "23:30", end: "24:00" });
+    for (let wd = 0; wd < 7; wd++) expect(at(addDays(monday, wd)).at(-1)!.end).toBe("23:30");
     expect(at(thursday).find((i) => i.taskKey === "daily:exercise")).toMatchObject({ title: "Exercise", detail: "Long run · 15 km" });
     expect(at(friday)[0]).toMatchObject({ start: "07:00", kind: "meal" }); // up early for the 08:00 lecture
   });
@@ -306,6 +306,38 @@ describe("daily timeline", () => {
 
   it("has no references to YouTube, Instagram, reels or videos any more", () => {
     expect(JSON.stringify(T)).not.toMatch(/youtube|instagram|reel|video/i);
+  });
+
+  it("has no sleeping time, and the Saturday workout is a run, not the gym", () => {
+    expect(T.dailyTasks.some((d) => d.key === "sleep")).toBe(false);
+    expect(T.dailyTasks.some((d) => d.habit?.startsWith("Sleep"))).toBe(false);
+    expect(T.timeline.flatMap((d) => d.blocks).some((b) => b.taskKey === "sleep" || (b.kind as string) === "sleep")).toBe(false);
+    expect(JSON.stringify(T)).not.toMatch(/gym|lights out|Sleep by/i);
+    expect(dailyTasksFor(T, "2026-10-24").find((x) => x.taskKey === "daily:exercise")).toMatchObject({ detail: "Running", time: "19:00" });
+    expect(T.weeklyGoals.find((g) => g.key === "exercise")!.target).toContain("Sat — run");
+    expect(at("2026-10-24").find((i) => i.kind === "exercise")).toMatchObject({ start: "19:00", end: "20:30", title: "Exercise", detail: "Running" });
+    expect(at("2026-10-24").some((i) => i.title === "Get ready for the run")).toBe(true);
+  });
+
+  it("cleans a plan saved before: no sleep task or blocks, and the default gym wording becomes running", () => {
+    const old = structuredClone(contentOf(T)) as ReturnType<typeof contentOf> & { dailyTasks: { key: string; title: string; weekdays: number[]; time?: string; detailByWeekday?: Record<number, string> }[] };
+    old.dailyTasks.push({ key: "sleep", title: "Sleep by 23:30", weekdays: [1, 2, 3, 4, 5, 6, 7], time: "23:30" });
+    old.dailyTasks.find((d) => d.key === "exercise")!.detailByWeekday![6] = "Gym";
+    old.weeklyGoals.find((g) => g.key === "exercise")!.target = "Mon — easy run · Wed — strength · Thu — long run · Sat — gym";
+    for (const day of old.timeline) day.blocks.push({ id: `old-sleep-${day.weekday}`, start: "23:30", end: "24:00", kind: "sleep" as never, title: "", taskKey: "sleep" });
+    old.timeline.find((d) => d.weekday === 6)!.blocks.find((b) => b.title === "Get ready for the run")!.title = "Go to the gym";
+    old.timeline.find((d) => d.weekday === 6)!.blocks.find((b) => b.title === "Go to the gym")!.kind = "travel";
+    old.timeline.find((d) => d.weekday === 1)!.blocks.find((b) => b.title === "Free time")!.title = "My own gym time"; // the user's own words stay
+
+    const t2 = applyContent(T, old);
+    expect(t2.dailyTasks.some((d) => d.key === "sleep")).toBe(false);
+    expect(t2.timeline.flatMap((d) => d.blocks).some((b) => b.taskKey === "sleep" || (b.kind as string) === "sleep")).toBe(false);
+    expect(t2.dailyTasks.find((d) => d.key === "exercise")!.detailByWeekday![6]).toBe("Running");
+    expect(t2.weeklyGoals.find((g) => g.key === "exercise")!.target).toContain("Sat — run");
+    expect(t2.timeline.find((d) => d.weekday === 6)!.blocks.find((b) => b.title === "Get ready for the run")!.kind).toBe("rest");
+    expect(t2.timeline.find((d) => d.weekday === 1)!.blocks.some((b) => b.title === "My own gym time")).toBe(true);
+    expect(validateTimeline(t2)).toBeNull();
+    expect(parsePlanContent(contentOf(t2), T).ok).toBe(true); // and it can be saved again
   });
 
   it("rejects edits that overlap, run backwards, or link a task to a day it doesn't run", () => {
@@ -340,7 +372,7 @@ describe("daily timeline", () => {
     const t2 = applyContent(T, old as never);
     expect(JSON.stringify(t2)).not.toMatch(/youtube|instagram/i);
     expect(t2.dailyTasks.some((d) => d.key === "post")).toBe(false);
-    expect(t2.timeline).toBe(T.timeline);
+    expect(t2.timeline).toEqual(T.timeline);
     expect(t2.dailyTasks.find((d) => d.key === "newperson")!.anytime).toBe(true);
     // the task they added themselves has no slot yet, and the analysis says so
     expect(untimedTasks(t2, monday).map((x) => x.taskKey)).toEqual(["daily:walk"]);
@@ -365,16 +397,10 @@ describe("analysis of the week", () => {
 
   it("accounts for every minute between waking up and lights out", () => {
     for (const d of a.days) {
-      const awake = toMin(d.sleepAt) - toMin(d.wake);
+      const awake = toMin(d.end) - toMin(d.wake);
       const planned = d.minutes.class + d.minutes.study + d.minutes.exercise + d.minutes.meal + d.minutes.travel + d.minutes.social + d.minutes.rest;
       expect(planned, `day ${d.weekday}`).toBe(awake);
     }
-  });
-
-  it("computes sleep before each day", () => {
-    expect(day(1).sleepBefore).toBe(8.5); // Sunday 23:30 → Monday 08:00
-    expect(day(5).sleepBefore).toBe(7.5); // Thursday 23:30 → Friday 07:00
-    expect(day(6).sleepBefore).toBe(9); // Friday 23:30 → Saturday 08:30
   });
 
   it("finds no problems in the default plan, and notes the busiest day", () => {

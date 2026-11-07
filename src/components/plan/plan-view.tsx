@@ -522,7 +522,7 @@ function ScheduleCard({ t, today }: { t: PlanTemplate; today: ISODate }) {
     <div className="space-y-3">
       <div>
         <h2 id="schedule-h" className="text-lg font-semibold">My weekly schedule</h2>
-        <p className="text-sm text-muted">Each day hour by hour: classes from the UM timetable (rooms checked against MAYA on 8 Oct 2026), study, meals and exercise at <strong>19:00</strong>. Lights out by 23:30.</p>
+        <p className="text-sm text-muted">Each day hour by hour: classes from the UM timetable (rooms checked against MAYA on 8 Oct 2026), study, meals and exercise at <strong>19:00</strong>.</p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {t.schedule.map((d) => {

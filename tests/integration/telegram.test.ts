@@ -150,8 +150,8 @@ describe("the bot's messages and tap-to-tick", () => {
     const bot = fakeApi();
     await handleUpdate(db, bot.api, say(c.chat, "/today"), new Date(WED));
     const msg = bot.to(String(c.chat))[0]!;
-    expect(msg.text).toMatch(/9 of 9 tasks still open/);
-    expect(msg.keyboard).toHaveLength(9);
+    expect(msg.text).toMatch(/8 of 8 tasks still open/);
+    expect(msg.keyboard).toHaveLength(8);
     const dl = msg.keyboard!.flat().find((b) => b.text.includes("DeepLearning"))!;
     expect(dl.callback_data).toBe("t:dl:2026-10-21");
 
@@ -159,8 +159,8 @@ describe("the bot's messages and tap-to-tick", () => {
     expect((await getPlanData(c.ctx))!.checks).toContain("daily:dl|2026-10-21");
     expect(bot.answers.at(-1)!.text).toBe("Ticked ✅");
     const edit = bot.sent.find((m) => m.edited === 91)!;
-    expect(edit.text).toMatch(/8 of 9 tasks still open/);
-    expect(edit.keyboard).toHaveLength(8);
+    expect(edit.text).toMatch(/7 of 8 tasks still open/);
+    expect(edit.keyboard).toHaveLength(7);
     expect(edit.text).not.toContain("DeepLearning");
 
     await handleUpdate(db, bot.api, tap(c.chat, dl.callback_data, 91), new Date(WED)); // tapping an old button again is harmless
@@ -172,7 +172,7 @@ describe("the bot's messages and tap-to-tick", () => {
     const day = (await getPlanData(c.ctx))!.template.dailyTasks.filter((d) => d.weekdays.includes(3));
     const bot = fakeApi();
     for (const t of day) await handleUpdate(db, bot.api, tap(c.chat, `t:${t.key}:2026-10-21`, 5), new Date(WED));
-    expect(bot.sent.at(-1)!.text).toMatch(/All 9 tasks done/);
+    expect(bot.sent.at(-1)!.text).toMatch(/All 8 tasks done/);
     expect(bot.sent.at(-1)!.keyboard).toEqual([]);
   });
 
@@ -214,7 +214,7 @@ describe("scheduled Telegram reminders", () => {
     await sendDueTelegramReminders(db, AT_2330, bot.api);
     await sendDueTelegramReminders(db, new Date("2026-10-21T15:45:00Z"), bot.api); // the next cron run
     expect(bot.to(String(c.chat))).toHaveLength(1);
-    expect(bot.to(String(c.chat))[0]!.keyboard).toHaveLength(9);
+    expect(bot.to(String(c.chat))[0]!.keyboard).toHaveLength(8);
     await sendDueTelegramReminders(db, new Date("2026-10-22T15:30:00Z"), bot.api); // next evening
     expect(bot.to(String(c.chat))).toHaveLength(2);
   });
@@ -350,7 +350,7 @@ describe("editing from Telegram", () => {
 
     await handleUpdate(db, bot.api, say(c.chat, "/week"), new Date(WED));
     expect(lastText(bot, c.chat)).toMatch(/Week 1 · Oct 19 – Oct 25\n0 of \d+ done/);
-    expect(lastText(bot, c.chat)).toMatch(/Wed .* 0\/9 {2}← today/);
+    expect(lastText(bot, c.chat)).toMatch(/Wed .* 0\/8 {2}← today/);
     expect(lastText(bot, c.chat)).toMatch(/Books finished: 1 of 3/);
     await handleUpdate(db, bot.api, say(c.chat, "/timeline"), new Date(WED));
     expect(lastText(bot, c.chat)).toMatch(/14:00–16:00 {2}WIG3007 Special Topics in Multimedia/);
@@ -461,19 +461,19 @@ describe("to-dos", () => {
     expect(msg.text).toContain("Due today (today)");
     expect(msg.text).not.toContain("Later");
     expect(msg.text).not.toContain("Someday");
-    expect(msg.keyboard).toHaveLength(9 + 2);
+    expect(msg.keyboard).toHaveLength(8 + 2);
 
     const btn = msg.keyboard!.flat().find((b) => b.text.includes("Due today"))!;
     await handleUpdate(db, bot.api, tapOn(c.chat, btn.callback_data, msg.text, msg.keyboard!), new Date(AT_2330));
     const after = bot.sent.find((m) => m.edited === 60)!;
-    expect(after.keyboard).toHaveLength(9 + 1 + 1); // the plan's 9, the other to-do, and Undo
+    expect(after.keyboard).toHaveLength(8 + 1 + 1); // the plan's 8, the other to-do, and Undo
     expect(after.text).toContain("✅ Done: Due today");
     // tapping a plan task now redraws the whole message, to-dos included
     await handleUpdate(db, bot.api, tap(c.chat, "t:dl:2026-10-21", 61), new Date(AT_2330));
     const redraw = bot.sent.find((m) => m.edited === 61)!;
     expect(redraw.text).toContain("To-dos due:");
     expect(redraw.text).not.toContain("Due today");
-    expect(redraw.keyboard).toHaveLength(8 + 1);
+    expect(redraw.keyboard).toHaveLength(7 + 1);
   });
 
   it("a to-do alone is worth a reminder when the plan isn't running", async () => {

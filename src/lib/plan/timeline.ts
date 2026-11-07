@@ -4,7 +4,7 @@
  */
 import { addDays, isoWeekday, type ISODate } from "@/lib/core/dates";
 import { WEEKDAY_LONG } from "@/lib/core/format";
-import { dailyTasksFor, type ResolvedDaily } from "./logic";
+import { dailyTasksFor, taskRunsOnWeekday, type ResolvedDaily } from "./logic";
 import type { BlockKind, PlanTemplate } from "./types";
 
 export const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$/;
@@ -41,9 +41,15 @@ function classItems(t: PlanTemplate, weekday: number): TimelineItem[] {
 
 const byStart = (a: { start: string; end: string }, b: { start: string; end: string }) => toMin(a.start) - toMin(b.start) || toMin(a.end) - toMin(b.end);
 
-/** A representative date for a weekday (the first one in the plan), for wording that depends on the date. */
+/** The first day from which the daily schedule is final (after the last change of any task's weekdays). */
+export function scheduleStart(t: PlanTemplate): ISODate {
+  return t.dailyTasks.flatMap((d) => (d.changes ?? []).map((c) => c.from)).reduce((a, b) => (b > a ? b : a), t.startDate);
+}
+
+/** A representative date for a weekday – the first one once the schedule is final – for wording that depends on the date. */
 export function dateOfWeekday(t: PlanTemplate, weekday: number): ISODate {
-  return addDays(t.startDate, (weekday - isoWeekday(t.startDate) + 7) % 7);
+  const from = scheduleStart(t);
+  return addDays(from, (weekday - isoWeekday(from) + 7) % 7);
 }
 
 function build(t: PlanTemplate, weekday: number, tasks: Map<string, ResolvedDaily>): TimelineItem[] {
@@ -84,7 +90,7 @@ export function validateTimeline(t: PlanTemplate): string | null {
     const name = WEEKDAY_LONG[day.weekday - 1] ?? `Day ${day.weekday}`;
     if (!Number.isInteger(day.weekday) || day.weekday < 1 || day.weekday > 7 || days.has(day.weekday)) return "The timeline has an invalid day.";
     days.add(day.weekday);
-    const taskKeys = new Set(t.dailyTasks.filter((d) => d.weekdays.includes(day.weekday)).map((d) => d.key));
+    const taskKeys = new Set(t.dailyTasks.filter((d) => taskRunsOnWeekday(d, day.weekday)).map((d) => d.key));
     for (const b of day.blocks) {
       if (seen.has(b.id)) return "The timeline has a duplicate block.";
       seen.add(b.id);

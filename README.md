@@ -103,6 +103,7 @@ the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and th
   tasks) is stored as one validated JSON document in `plans.content` and laid over the default
   (`src/lib/plan/content.ts`); items keep their ids, so ticks follow a renamed task and a removed task's ticks stop
   counting. Ticks (`plan_checks`) and the Sunday numbers (`plan_metrics`) are stored separately, one `plans` row per user.
+* A daily task can change its weekdays from a date (`changes`, e.g. running five days a week from 9 Nov): days before keep their old schedule, so past ticks and counts don't move.
 * The timeline (`src/lib/plan/timeline.ts`) merges the fixed class timetable with editable blocks, checks that blocks don't overlap, and drives the *Analysis* section (hours per kind of activity per day, sleep, late workouts, tasks without a slot).
 * Monthly numbers (weight, long run, books finished) are compared with each month's targets; the
   weight target is a straight line from the first logged weight to the goal unless a month sets its own.

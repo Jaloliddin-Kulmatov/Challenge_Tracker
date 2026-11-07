@@ -13,6 +13,17 @@
 import { addDays, compareDates, diffDays, isoWeekday, isValidISODate, maxDate, minDate, type ISODate } from "@/lib/core/dates";
 import type { DailyTask, MonthPlan, PlanTemplate, WeekPlan } from "./types";
 
+/** The weekdays and wording a daily task has on a date: its latest change that has started, else its base schedule. */
+export function taskDaysAt(task: DailyTask, date: ISODate): { weekdays: number[]; detailByWeekday?: Record<number, string> } {
+  let at = { weekdays: task.weekdays, detailByWeekday: task.detailByWeekday };
+  for (const c of task.changes ?? []) if (compareDates(c.from, date) <= 0) at = { weekdays: c.weekdays, detailByWeekday: c.detailByWeekday ?? task.detailByWeekday };
+  return at;
+}
+
+/** Whether a task ever runs on this weekday (in its base schedule or any later change). */
+export const taskRunsOnWeekday = (task: DailyTask, weekday: number) =>
+  task.weekdays.includes(weekday) || (task.changes ?? []).some((c) => c.weekdays.includes(weekday));
+
 export type CheckSet = ReadonlySet<string>;
 export const checkKey = (taskKey: string, period: string) => `${taskKey}|${period}`;
 
@@ -81,7 +92,7 @@ export interface ResolvedDaily {
 
 function resolveDaily(t: PlanTemplate, task: DailyTask, date: ISODate): ResolvedDaily {
   const wd = isoWeekday(date);
-  let detail = task.detailByWeekday?.[wd];
+  let detail = taskDaysAt(task, date).detailByWeekday?.[wd];
   if (task.appendLongRunOn === wd) {
     const week = weekOf(t, date);
     const lr = week ? weekPlan(t, week)?.longRun : undefined;
@@ -96,7 +107,7 @@ function resolveDaily(t: PlanTemplate, task: DailyTask, date: ISODate): Resolved
 
 export function dailyTasksFor(t: PlanTemplate, date: ISODate): ResolvedDaily[] {
   const wd = isoWeekday(date);
-  return t.dailyTasks.filter((task) => task.weekdays.includes(wd)).map((task) => resolveDaily(t, task, date));
+  return t.dailyTasks.filter((task) => taskDaysAt(task, date).weekdays.includes(wd)).map((task) => resolveDaily(t, task, date));
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +301,7 @@ export function monthStats(t: PlanTemplate, month: MonthPlan, metrics: readonly 
     let done = 0;
     let total = 0;
     for (let d = start; compareDates(d, last) <= 0; d = addDays(d, 1)) {
-      if (!task.weekdays.includes(isoWeekday(d))) continue;
+      if (!taskDaysAt(task, d).weekdays.includes(isoWeekday(d))) continue;
       total += 1;
       if (checks.has(checkKey(`daily:${task.key}`, d))) done += 1;
     }

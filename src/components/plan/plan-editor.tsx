@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
+import { formatDateShort } from "@/lib/core/dates";
 import { WEEKDAY_LONG, WEEKDAY_SHORT } from "@/lib/core/format";
 import { newId, removeDailyTask } from "@/lib/plan/content";
 import { fromMin, parseRange, TIME_RE, toMin } from "@/lib/plan/timeline";
@@ -226,6 +227,11 @@ function DailyRow({ task, index, onChange, onRemove }: { task: DailyTask; index:
           );
         })}
       </div>
+      {task.changes?.map((c) => (
+        <p key={c.from} className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">
+          From <strong>{formatDateShort(c.from)}</strong> this task runs on <strong>{c.weekdays.map((d) => WEEKDAY_SHORT[d - 1]).join(", ")}</strong> (the days above are the schedule before that).
+        </p>
+      ))}
       <label className="flex items-center gap-2 text-sm text-muted">
         Time (optional)
         <Input

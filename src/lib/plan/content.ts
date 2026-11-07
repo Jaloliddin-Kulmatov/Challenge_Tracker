@@ -35,6 +35,10 @@ const dailyTask = z.object({
   appendLongRunOn: z.number().int().min(1).max(7).optional(),
   habit: z.string().trim().max(40).optional(),
   anytime: z.boolean().optional(),
+  changes: z
+    .array(z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-09."), weekdays, detailByWeekday: z.record(z.coerce.number().int().min(1).max(7), z.string().max(60)).optional() }))
+    .max(10)
+    .optional(),
 });
 const result = z.object({ id: z.string().regex(/^[a-z0-9-]{1,30}$/), text: text("A monthly result", 120) });
 
@@ -112,17 +116,28 @@ const RETIRED = { goals: ["social-media"], dailyTasks: ["post", "sleep"], weekly
 const REWORDED: Record<string, string> = {
   "Mon — easy run · Wed — strength · Thu — long run · Sat — gym": "Mon — easy run · Wed — strength · Thu — long run · Sat — run",
   "Go to the gym": "Get ready for the run",
+  "Mon — easy run · Wed — strength · Thu — long run · Sat — run": "Mon, Wed, Fri — easy run · Thu — long run · Sat — run",
+  "Exercise 4x a week; 25 km long run; 65 kg": "Run 5 days a week; 25 km long run; 65 kg",
 };
 
 /** Bring an older saved edit up to date: drop retired items, fill what it predates (the timeline, "anytime"). */
 function upgrade(base: PlanTemplate, c: Partial<PlanContent>): PlanContent {
   const baseTasks = new Map(base.dailyTasks.map((d) => [d.key, d]));
+  const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const dailyTasks = (c.dailyTasks ?? base.dailyTasks)
+    .filter((d) => !RETIRED.dailyTasks.includes(d.key))
+    .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d))
+    .map((d) => (d.detailByWeekday?.[6] === "Gym" ? { ...d, detailByWeekday: { ...d.detailByWeekday, 6: "Running" } } : d))
+    // a task still on its original weekdays gets the schedule change that came later (e.g. running five days from 9 Nov)
+    .map((d) => {
+      const b = baseTasks.get(d.key);
+      return d.changes === undefined && b?.changes && sameDays(d.weekdays, b.weekdays) ? { ...d, changes: b.changes } : d;
+    });
   return {
-    goals: (c.goals ?? base.goals).filter((g) => !RETIRED.goals.includes(g.key)),
-    dailyTasks: (c.dailyTasks ?? base.dailyTasks)
-      .filter((d) => !RETIRED.dailyTasks.includes(d.key))
-      .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d))
-      .map((d) => (d.detailByWeekday?.[6] === "Gym" ? { ...d, detailByWeekday: { ...d.detailByWeekday, 6: "Running" } } : d)),
+    goals: (c.goals ?? base.goals)
+      .filter((g) => !RETIRED.goals.includes(g.key))
+      .map((g) => (REWORDED[g.target] ? { ...g, target: REWORDED[g.target]! } : g)),
+    dailyTasks,
     weeklyGoals: (c.weeklyGoals ?? base.weeklyGoals)
       .filter((g) => !RETIRED.weeklyGoals.includes(g.key))
       .map((g) => (REWORDED[g.target] ? { ...g, target: REWORDED[g.target]! } : g)),
@@ -132,13 +147,18 @@ function upgrade(base: PlanTemplate, c: Partial<PlanContent>): PlanContent {
       return rest;
     }),
     weeks: c.weeks ?? base.weeks,
-    timeline: (c.timeline ?? base.timeline).map((day) => ({
-      ...day,
-      blocks: day.blocks
+    timeline: (c.timeline ?? base.timeline).map((day) => {
+      const blocks = day.blocks
         // sleep is no longer part of the plan: its task and its blocks go
         .filter((b) => !(b.taskKey && RETIRED.dailyTasks.includes(b.taskKey)) && (b.kind as string) !== "sleep")
-        .map((b) => (REWORDED[b.title] ? { ...b, title: REWORDED[b.title]!, kind: b.title === "Go to the gym" ? ("rest" as const) : b.kind } : b)),
-    })),
+        .map((b) => (REWORDED[b.title] ? { ...b, title: REWORDED[b.title]!, kind: b.title === "Go to the gym" ? ("rest" as const) : b.kind } : b));
+      // exercise now also runs on a day the saved timeline has no slot for: add one at 19:00 if that hour is free
+      const runsHere = dailyTasks.some((d) => d.key === "exercise" && (d.changes ?? []).some((ch) => ch.weekdays.includes(day.weekday)));
+      const free = !blocks.some((b) => b.taskKey === "exercise") && !blocks.some((b) => b.start < "20:00" && b.end > "19:00");
+      const classBusy = (base.schedule.find((s) => s.weekday === day.weekday)?.classes ?? []).some((cl) => cl.time.slice(0, 5) < "20:00" && cl.time.slice(6, 11) > "19:00");
+      if (runsHere && free && !classBusy) blocks.push({ id: `d${day.weekday}-run`, start: "19:00", end: "20:00", kind: "exercise", title: "", taskKey: "exercise" });
+      return { ...day, blocks };
+    }),
   };
 }
 

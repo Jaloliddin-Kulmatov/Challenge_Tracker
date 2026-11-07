@@ -7,6 +7,13 @@ export interface PlanGoal {
   target: string;
 }
 
+/** From `from` on, a task repeats on these weekdays (with this wording) instead. Earlier days keep the schedule they had. */
+export interface DailyTaskChange {
+  from: ISODate;
+  weekdays: number[];
+  detailByWeekday?: Record<number, string>;
+}
+
 /** A task that repeats on certain weekdays (ISO: Mon = 1 … Sun = 7) and is ticked per day. */
 export interface DailyTask {
   key: string;
@@ -14,6 +21,8 @@ export interface DailyTask {
   weekdays: number[];
   /** Wall-clock time shown next to the task, e.g. "19:00". */
   time?: string;
+  /** Later changes of the weekdays, oldest first; the last one whose date has come applies. */
+  changes?: DailyTaskChange[];
   /** Per-weekday sub-label (e.g. which workout it is). */
   detailByWeekday?: Record<number, string>;
   /** Append the week's long-run target on this weekday (e.g. Thursday). */

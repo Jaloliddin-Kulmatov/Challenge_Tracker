@@ -47,8 +47,24 @@ Set up once:
 ## Telegram bot (reminders you can tap)
 
 Besides email, the plan page has a **Telegram reminder**: every evening (same time as the email, default 23:30) the bot
-sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). `/today` shows today's
-tasks any time, `/stop` disconnects.
+sends the tasks you haven't ticked as buttons – tap one and it is ticked (the message updates). The bot can also edit
+your plan (`src/lib/services/telegram-bot.ts`):
+
+| Command | What it does |
+|---|---|
+| *any plain message* or `/todo …` | add a one-off **to-do**; end with a day for a due date (`buy a SIM card fri`, `call mum tomorrow`, `pay rent 2026-11-30`); ↩ Undo under the reply |
+| `/todos` | your open to-dos with ✅ finish and 🗑 delete buttons (the website's *To-do* card shows the same list) |
+| `/today`, `/timeline`, `/week` | today's tasks as tap-to-tick buttons, today hour by hour, how the week is going |
+| `/untick` | undo a tick |
+| `/add Walk 20 min mon wed fri` | add a daily task (days optional; default every day) |
+| `/rename`, `/remove` | pick a daily task, then reply with the new name / confirm the removal |
+| `/books` | mark a book as finished |
+| `/weight 70.5`, `/run 15` | log this week's weight and long run |
+| `/time 22:30`, `/on`, `/off` | change or switch the reminder |
+| `/stop` | disconnect the chat |
+
+To-dos that are due today or overdue are added to the evening message as buttons. The bot's description and command menu
+are set automatically (the profile picture can only be set in @BotFather: `/setuserpic`). Edits use the same validation as the website's editor; removing a task keeps its timeline slots as plain blocks.
 
 * Connecting: **Connect Telegram** opens the bot with a one-time code (valid 15 minutes, stored hashed, single use);
   pressing *Start* links that chat to your account. A chat can belong to one account only.
@@ -79,7 +95,7 @@ shows `public/offline.html` when the connection drops) and an install prompt (`s
 ## Semester plan (checklist tracker)
 
 `/plan` is a ready-made, tick-as-you-go tracker for the **"Semester 4 – Malaysia (Oct 19 – Feb 28)"** plan: overall goals,
-today as an hour-by-hour timeline (classes from the timetable + study, meals, exercise at 19:00; 9 ticks Mon–Sat, a short rest-day list on Sunday; also available as a plain checklist), monthly goals (this month + next), a card for each of
+today as an hour-by-hour timeline (classes from the timetable + study, meals, exercise at 19:00; 8 ticks Mon–Sat, a short rest-day list on Sunday; also available as a plain checklist), monthly goals (this month + next), a card for each of
 the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and the weekly class schedule with exercise at 19:00.
 
 * The plan's *default content* lives in code (`src/lib/plan/malaysia-semester4.ts`). Everything the user edits on
@@ -87,6 +103,7 @@ the 19 weeks (with the weekly goals and a Sunday "log the numbers" form), and th
   tasks) is stored as one validated JSON document in `plans.content` and laid over the default
   (`src/lib/plan/content.ts`); items keep their ids, so ticks follow a renamed task and a removed task's ticks stop
   counting. Ticks (`plan_checks`) and the Sunday numbers (`plan_metrics`) are stored separately, one `plans` row per user.
+* A daily task can change its weekdays from a date (`changes`, e.g. running five days a week from 9 Nov): days before keep their old schedule, so past ticks and counts don't move.
 * The timeline (`src/lib/plan/timeline.ts`) merges the fixed class timetable with editable blocks, checks that blocks don't overlap, and drives the *Analysis* section (hours per kind of activity per day, sleep, late workouts, tasks without a slot).
 * Monthly numbers (weight, long run, books finished) are compared with each month's targets; the
   weight target is a straight line from the first logged weight to the goal unless a month sets its own.

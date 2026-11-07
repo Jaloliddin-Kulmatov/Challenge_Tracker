@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import * as s from "@/lib/db/schema";
 import { compareDates, type ISODate } from "@/lib/core/dates";
-import { applyContent, parsePlanContent } from "@/lib/plan/content";
+import { applyContent, contentOf, parsePlanContent } from "@/lib/plan/content";
 import { parseWeekPeriod, validateCheck, weekRange, checkKey } from "@/lib/plan/logic";
 import { DEFAULT_PLAN_KEY, getTemplate } from "@/lib/plan/templates";
 import type { PlanTemplate } from "@/lib/plan/types";
@@ -160,4 +160,16 @@ export async function resetPlanContent(ctx: Ctx, templateKey = DEFAULT_PLAN_KEY)
   const plan = await findPlan(ctx, base.key);
   if (!plan) throw notFound("Your plan");
   await ctx.db.update(s.plans).set({ content: null }).where(and(eq(s.plans.id, plan.id), eq(s.plans.ownerId, ctx.user.id)));
+}
+
+/** Change the user's plan content with a pure function and save it if it is still valid (same rules as the editor). */
+export async function editPlanContent(ctx: Ctx, change: (c: ReturnType<typeof contentOf>) => ReturnType<typeof contentOf>, templateKey = DEFAULT_PLAN_KEY): Promise<PlanTemplate> {
+  const base = baseOf(templateKey);
+  const plan = await findPlan(ctx, base.key);
+  if (!plan) throw notFound("Your plan");
+  const next = change(contentOf(applyContent(base, plan.content)));
+  const parsed = parsePlanContent(next, base);
+  if (!parsed.ok) throw invalid(parsed.error);
+  await ctx.db.update(s.plans).set({ content: parsed.content }).where(and(eq(s.plans.id, plan.id), eq(s.plans.ownerId, ctx.user.id)));
+  return applyContent(base, parsed.content);
 }

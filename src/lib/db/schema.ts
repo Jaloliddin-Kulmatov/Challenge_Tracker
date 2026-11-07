@@ -425,6 +425,24 @@ export const telegramLinkTokens = pgTable(
   (t) => [index("telegram_link_tokens_user_idx").on(t.userId)],
 );
 
+/** One-off to-dos (as opposed to the plan's recurring tasks). Added from the website or by messaging the Telegram bot. */
+export const todos = pgTable(
+  "todos",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    /** The user's local calendar date it is due, if any. */
+    dueDate: day("due_date"),
+    doneAt: ts("done_at"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("todos_user_idx").on(t.userId, t.doneAt),
+    check("todos_title_len", sql`char_length(${t.title}) between 1 and 200`),
+  ],
+);
+
 export type PlanRow = typeof plans.$inferSelect;
 export type PlanMetricRow = typeof planMetrics.$inferSelect;
 export type UserRow = typeof user.$inferSelect;

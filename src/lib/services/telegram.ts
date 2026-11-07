@@ -1,22 +1,22 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/lib/db/client";
 import * as s from "@/lib/db/schema";
-import { localDateIn, localTimeIn } from "@/lib/core/dates";
+import { formatDateShort, localDateIn, localTimeIn } from "@/lib/core/dates";
 import { applyContent } from "@/lib/plan/content";
 import { checkKey } from "@/lib/plan/logic";
-import { composeTelegram, parseTickData, reminderDue } from "@/lib/plan/reminder";
+import { composeTelegram, reminderDue } from "@/lib/plan/reminder";
 import { getTemplate } from "@/lib/plan/templates";
-import { TelegramError, type TelegramApi, type TelegramUpdate } from "@/lib/telegram";
+import { TelegramError, type Keyboard, type TelegramApi } from "@/lib/telegram";
+import { listDueTodos, type Todo } from "./todos";
 import { parseInput } from "@/lib/validation";
 import type { Ctx } from "./context";
 import { badState } from "./errors";
-import { setCheck } from "./plan";
 
 const KIND = "plan-daily-telegram";
 const TOKEN_TTL_MS = 15 * 60_000;
-const DEFAULT_TIME = "23:30";
+export const DEFAULT_TIME = "23:30";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -74,7 +74,7 @@ export async function disconnectTelegram(ctx: Ctx): Promise<void> {
 // Messages
 // ---------------------------------------------------------------------------
 
-async function loadDay(db: Db, userId: string, now: Date) {
+export async function loadDay(db: Db, userId: string, now: Date) {
   const [row] = await db
     .select({ timezone: s.user.timezone, planId: s.plans.id, templateKey: s.plans.templateKey, content: s.plans.content })
     .from(s.user)
@@ -92,10 +92,28 @@ async function loadDay(db: Db, userId: string, now: Date) {
   };
 }
 
+export const todoLabel = (t: Todo, today: string) => `${t.dueDate && t.dueDate < today ? "⚠️ " : ""}${t.title}${t.dueDate ? ` (${t.dueDate === today ? "today" : t.dueDate < today ? `overdue since ${formatDateShort(t.dueDate)}` : formatDateShort(t.dueDate)})` : ""}`;
+const clipBtn = (t: string, n = 44) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+/**
+ * The day's message: the plan's open tasks (tap to tick) and the to-dos that are due or overdue (tap to finish).
+ * Null when there is nothing at all to say (no running plan and nothing due).
+ */
+export async function composeDay(db: Db, userId: string, now: Date): Promise<{ text: string; keyboard: Keyboard; open: number } | null> {
+  const [u] = await db.select({ timezone: s.user.timezone }).from(s.user).where(eq(s.user.id, userId)).limit(1);
+  if (!u) return null;
+  const today = localDateIn(now, u.timezone);
+  const [day, due] = await Promise.all([loadDay(db, userId, now), listDueTodos({ db, user: { id: userId, timezone: u.timezone }, now }, today)]);
+  const plan = day && composeTelegram(day.t, day.checks, day.today);
+  if (!plan && due.length === 0) return null;
+  const text = [plan?.text, due.length > 0 ? `To-dos due:\n${due.map((t) => `• ${todoLabel(t, today)}`).join("\n")}` : null].filter(Boolean).join("\n\n");
+  const keyboard: Keyboard = [...(plan?.keyboard ?? []), ...due.slice(0, 20).map((t) => [{ text: `☐ ${clipBtn(t.title)}`, callback_data: `td:${t.id}` }])];
+  return { text, keyboard, open: keyboard.length };
+}
+
 /** Send the day's message to the user's chat. Returns false when there is nothing to say. */
-async function sendDay(db: Db, api: TelegramApi, userId: string, chatId: string, now: Date): Promise<boolean> {
-  const day = await loadDay(db, userId, now);
-  const msg = day && composeTelegram(day.t, day.checks, day.today);
+export async function sendDay(db: Db, api: TelegramApi, userId: string, chatId: string, now: Date): Promise<boolean> {
+  const msg = await composeDay(db, userId, now);
   if (!msg) return false;
   await api.sendMessage(chatId, msg.text, msg.keyboard);
   return true;
@@ -111,112 +129,6 @@ export async function sendTelegramTest(ctx: Ctx, api: TelegramApi): Promise<void
   } catch (err) {
     throw badState(`The message couldn't be sent: ${err instanceof Error ? err.message : "unknown error"}`);
   }
-}
-
-// ---------------------------------------------------------------------------
-// The bot (Telegram → app)
-// ---------------------------------------------------------------------------
-
-const HELP = [
-  "I send you the tasks you haven't ticked yet, and you tap them to tick them.",
-  "",
-  "/today – today's tasks",
-  "/stop – disconnect this chat",
-].join("\n");
-
-async function userOfChat(db: Db, chatId: string): Promise<{ id: string; timezone: string } | null> {
-  const [row] = await db
-    .select({ id: s.user.id, timezone: s.user.timezone })
-    .from(s.telegramLinks)
-    .innerJoin(s.user, eq(s.user.id, s.telegramLinks.userId))
-    .where(eq(s.telegramLinks.chatId, chatId))
-    .limit(1);
-  return row ?? null;
-}
-
-/** Process one update from Telegram. Never throws: a failure must not make Telegram resend the same update forever. */
-export async function handleUpdate(db: Db, api: TelegramApi, update: TelegramUpdate, now: Date): Promise<void> {
-  try {
-    if (update.callback_query) return await handleCallback(db, api, update.callback_query, now);
-    if (update.message?.text) return await handleMessage(db, api, update.message, now);
-  } catch (err) {
-    console.error("[telegram update failed]", update.update_id, err instanceof Error ? err.message : err);
-  }
-}
-
-async function handleMessage(db: Db, api: TelegramApi, msg: NonNullable<TelegramUpdate["message"]>, now: Date): Promise<void> {
-  if (msg.chat.type !== "private") return; // only ever talk to people one to one
-  const chatId = String(msg.chat.id);
-  const [command, arg] = (msg.text ?? "").trim().split(/\s+/, 2) as [string, string | undefined];
-  const cmd = command.split("@")[0]!.toLowerCase();
-  const user = await userOfChat(db, chatId);
-
-  if (cmd === "/start" && arg) return void (await link(db, api, chatId, arg, now));
-  if (!user) {
-    await api.sendMessage(chatId, "Hi! To connect this chat, open your plan on the website, press “Connect Telegram” and then Start here.");
-    return;
-  }
-  if (cmd === "/stop") {
-    await db.delete(s.telegramLinks).where(eq(s.telegramLinks.userId, user.id));
-    await db.update(s.notificationPreferences).set({ telegramEnabled: false, updatedAt: new Date() }).where(eq(s.notificationPreferences.userId, user.id));
-    await api.sendMessage(chatId, "Disconnected. You won't get reminders here any more. You can connect again from the website.");
-    return;
-  }
-  if (cmd === "/today") {
-    if (!(await sendDay(db, api, user.id, chatId, now))) await api.sendMessage(chatId, "There is nothing to tick today: your plan isn't running.");
-    return;
-  }
-  await api.sendMessage(chatId, cmd === "/start" ? `You're connected. ${HELP}` : HELP);
-}
-
-async function link(db: Db, api: TelegramApi, chatId: string, token: string, now: Date): Promise<void> {
-  // single use: deleting the row is what claims it
-  const [claimed] = await db
-    .delete(s.telegramLinkTokens)
-    .where(and(eq(s.telegramLinkTokens.tokenHash, hash(token)), gt(s.telegramLinkTokens.expiresAt, now)))
-    .returning({ userId: s.telegramLinkTokens.userId });
-  if (!claimed) {
-    await api.sendMessage(chatId, "That link has expired or was already used. Press “Connect Telegram” on the website again.");
-    return;
-  }
-  await db.transaction(async (tx) => {
-    await tx.delete(s.telegramLinks).where(eq(s.telegramLinks.chatId, chatId)); // a chat belongs to one account
-    await tx
-      .insert(s.telegramLinks)
-      .values({ userId: claimed.userId, chatId })
-      .onConflictDoUpdate({ target: s.telegramLinks.userId, set: { chatId, linkedAt: now } });
-    await tx
-      .insert(s.notificationPreferences)
-      .values({ userId: claimed.userId, telegramEnabled: true, reminderTime: DEFAULT_TIME })
-      .onConflictDoUpdate({ target: s.notificationPreferences.userId, set: { telegramEnabled: true, updatedAt: new Date() } });
-  });
-  const [prefs] = await db.select().from(s.notificationPreferences).where(eq(s.notificationPreferences.userId, claimed.userId)).limit(1);
-  await api.sendMessage(chatId, `✅ Connected! I'll message you every day at ${prefs?.reminderTime ?? DEFAULT_TIME} with what you haven't ticked yet.\n\n${HELP}`);
-}
-
-async function handleCallback(db: Db, api: TelegramApi, q: NonNullable<TelegramUpdate["callback_query"]>, now: Date): Promise<void> {
-  const chat = q.message?.chat;
-  if (!chat || chat.type !== "private" || chat.id !== q.from.id) return void (await api.answerCallback(q.id));
-  const chatId = String(chat.id);
-  const tick = parseTickData(q.data ?? "");
-  const user = await userOfChat(db, chatId);
-  if (!tick || !user) return void (await api.answerCallback(q.id, "This chat isn't connected any more."));
-
-  // exactly the same checks as ticking on the website: owned plan, valid task, not in the future
-  const ctx: Ctx = { db, user, now };
-  try {
-    await setCheck(ctx, { taskKey: tick.taskKey, period: tick.date, checked: true });
-  } catch (err) {
-    const known = err instanceof Error && ["VALIDATION", "NOT_FOUND"].includes((err as { code?: string }).code ?? "");
-    return void (await api.answerCallback(q.id, known ? (err as Error).message : "Couldn't save that. Try again."));
-  }
-  await api.answerCallback(q.id, "Ticked ✅");
-
-  // refresh the message so the ticked task disappears
-  const day = await loadDay(db, user.id, now);
-  const msg = day && tick.date === day.today ? composeTelegram(day.t, day.checks, day.today) : null;
-  if (q.message && msg) await api.editMessage(chatId, q.message.message_id, msg.text, msg.keyboard).catch(() => {});
-  else if (q.message) await api.editMessage(chatId, q.message.message_id, "✅ Saved.", []).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -246,13 +158,12 @@ export async function sendDueTelegramReminders(db: Db, now: Date, api: TelegramA
         run.skipped += 1;
         continue;
       }
-      const day = await loadDay(db, r.userId, now);
-      const msg = day && composeTelegram(day.t, day.checks, day.today);
-      if (!day || !msg || msg.keyboard.length === 0) {
+      const msg = await composeDay(db, r.userId, now);
+      if (!msg || msg.open === 0) {
         run.skipped += 1;
         continue;
       }
-      const claimed = await db.insert(s.reminderLog).values({ userId: r.userId, kind: KIND, localDate: day.today }).onConflictDoNothing().returning({ id: s.reminderLog.id });
+      const claimed = await db.insert(s.reminderLog).values({ userId: r.userId, kind: KIND, localDate: localDateIn(now, r.timezone) }).onConflictDoNothing().returning({ id: s.reminderLog.id });
       if (claimed.length === 0) {
         run.skipped += 1;
         continue;

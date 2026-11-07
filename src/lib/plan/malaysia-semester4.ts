@@ -34,7 +34,7 @@ export const MALAYSIA_SEM4: PlanTemplate = {
     { key: "deeplearning", area: "DeepLearning.AI", target: "Math for ML + ML Specialization certificates; CV updated" },
     { key: "german", area: "German", target: "Goethe B2 certificate" },
     { key: "projects", area: "Projects", target: "ICOM, Talaba, Storytime: 1 release each per month" },
-    { key: "fitness", area: "Fitness", target: "Exercise 4x a week; 25 km long run; 65 kg" },
+    { key: "fitness", area: "Fitness", target: "Run 5 days a week; 25 km long run; 65 kg" },
     { key: "travel", area: "Travel", target: "Malaysia, Singapore, Vietnam" },
     { key: "social", area: "Social", target: "1 event a week; 20+ new friends" },
     { key: "ielts", area: "IELTS", target: "Retake in February" },
@@ -48,8 +48,10 @@ export const MALAYSIA_SEM4: PlanTemplate = {
       title: "Exercise",
       time: "19:00",
       weekdays: [1, 3, 4, 6],
-      detailByWeekday: { 1: "Easy run", 3: "Strength", 4: "Long run", 6: "Gym" },
+      detailByWeekday: { 1: "Easy run", 3: "Strength", 4: "Long run", 6: "Running" },
       appendLongRunOn: 4,
+      // from the week of 9 Nov: running five days a week (not Tuesday, not Sunday)
+      changes: [{ from: "2026-11-09", weekdays: [1, 3, 4, 5, 6], detailByWeekday: { 1: "Easy run", 3: "Easy run", 4: "Long run", 5: "Easy run", 6: "Running" } }],
     },
     { key: "nutrition", habit: "No-soda days", title: "No soda · protein + creatine + calcium with breakfast", weekdays: [1, 2, 3, 4, 5, 6, 7] },
     { key: "dl", habit: "DeepLearning.AI days", title: "DeepLearning.AI course — 60–90 min", weekdays: [1, 2, 3, 4, 5, 6] },
@@ -58,12 +60,11 @@ export const MALAYSIA_SEM4: PlanTemplate = {
     { key: "review", habit: "Lecture reviews", title: "Review today's lectures — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
     { key: "projects", habit: "Project days", title: "Projects — 30 min", weekdays: [1, 2, 3, 4, 5, 6] },
     { key: "newperson", habit: "New people met", title: "Talk to 1 new person", weekdays: [1, 2, 3, 4, 5, 6], anytime: true },
-    { key: "sleep", habit: "Sleep by 23:30", title: "Sleep by 23:30", time: "23:30", weekdays: [1, 2, 3, 4, 5, 6, 7] },
     { key: "weekly-review", title: "30-min review: log the numbers, plan next week", weekdays: [7] },
   ],
 
   weeklyGoals: [
-    { key: "exercise", area: "Exercise", target: "Mon — easy run · Wed — strength · Thu — long run · Sat — gym" },
+    { key: "exercise", area: "Exercise", target: "Mon, Wed, Fri — easy run · Thu — long run · Sat — run" },
     { key: "dl", area: "DeepLearning.AI", target: "1 course week" },
     { key: "german", area: "German", target: "5 hours" },
     { key: "studies", area: "Studies", target: "Assignments done 2 days early" },
@@ -116,53 +117,53 @@ export const MALAYSIA_SEM4: PlanTemplate = {
   ],
 
   // The hour-by-hour plan. Written as [start, end, kind, "@task-key" | "title"]; classes are added from `schedule`.
-  // Wake-up is 08:00 (07:00 on Fridays, the 08:00 lecture), campus is a 15-minute walk, lights out 23:30.
+  // Wake-up is 08:00 (07:00 on Fridays, the 08:00 lecture), campus is a 15-minute walk.
   timeline: timeline({
     1: [
       ["08:00", "08:45", "meal", "@nutrition"], ["08:45", "09:00", "travel", "Walk to campus"],
       ["11:00", "11:30", "study", "@review"], ["11:30", "13:00", "study", "@dl"], ["13:00", "14:00", "meal", "Lunch"],
       ["14:00", "14:45", "study", "@german"], ["14:45", "15:15", "study", "@projects"], ["15:15", "16:00", "rest", "Free · talk to someone new"],
       ["18:00", "19:00", "travel", "Home and get ready"], ["19:00", "20:00", "exercise", "@exercise"], ["20:00", "21:00", "meal", "Shower and dinner"],
-      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"],
     ],
     2: [
       ["08:00", "08:45", "meal", "@nutrition"], ["08:45", "10:00", "study", "@dl"],
       ["11:00", "11:45", "study", "@german"], ["11:45", "12:15", "study", "@projects"], ["12:15", "13:15", "meal", "Lunch"],
       ["13:15", "13:45", "rest", "Free"], ["13:45", "14:00", "travel", "Walk to campus"],
-      ["16:00", "16:30", "study", "@review"], ["16:30", "18:30", "rest", "Free · friends, club, errands"], ["18:30", "19:30", "meal", "Cook and dinner"],
-      ["19:30", "20:15", "rest", "Free"], ["20:15", "20:45", "study", "@reading"], ["20:45", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["16:00", "16:30", "study", "@review"], ["16:30", "18:30", "rest", "Free · errands"], ["18:30", "21:00", "social", "Club or friends · dinner out"],
+      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"],
     ],
     3: [
       ["08:00", "08:45", "meal", "@nutrition"], ["08:45", "10:15", "study", "@dl"], ["10:15", "11:00", "study", "@german"], ["11:00", "11:30", "study", "@projects"],
       ["11:30", "12:30", "rest", "Free · library, errands"], ["12:30", "13:45", "meal", "Lunch"], ["13:45", "14:00", "travel", "Walk to class"],
       ["16:00", "16:30", "study", "@review"], ["16:30", "18:30", "rest", "Free · talk to someone new"], ["18:30", "19:00", "travel", "Home and get ready"],
       ["19:00", "20:00", "exercise", "@exercise"], ["20:00", "21:00", "meal", "Shower and dinner"],
-      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"],
     ],
     4: [
       ["08:00", "08:45", "meal", "@nutrition"], ["08:45", "10:15", "study", "@dl"], ["10:15", "11:00", "study", "@german"], ["11:00", "11:30", "study", "@projects"],
       ["11:30", "12:30", "rest", "Free · assignments"], ["12:30", "13:45", "meal", "Lunch"], ["13:45", "14:00", "travel", "Walk to class"],
       ["18:00", "18:30", "study", "@review"], ["18:30", "19:00", "travel", "Home and get ready"],
       ["19:00", "21:00", "exercise", "@exercise"], ["21:00", "21:45", "meal", "Shower and dinner"],
-      ["21:45", "22:15", "study", "@reading"], ["22:15", "23:30", "rest", "Wind down"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["21:45", "22:15", "study", "@reading"], ["22:15", "23:30", "rest", "Wind down"],
     ],
     5: [
       ["07:00", "07:45", "meal", "@nutrition"], ["07:45", "08:00", "travel", "Walk to campus"],
       ["10:00", "11:30", "study", "@dl"], ["11:30", "12:15", "study", "@german"], ["12:15", "13:15", "meal", "Lunch"], ["13:15", "13:45", "study", "@projects"],
       ["13:45", "15:00", "rest", "Free · assignments"],
-      ["17:00", "17:30", "study", "@review"], ["17:30", "18:30", "rest", "Free"], ["18:30", "21:00", "social", "Club or friends · dinner out"],
-      ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["17:00", "17:30", "study", "@review"], ["17:30", "18:30", "rest", "Free"], ["18:30", "19:00", "rest", "Get ready for the run"], ["19:00", "20:00", "exercise", "@exercise"],
+      ["20:00", "21:00", "meal", "Shower and dinner"], ["21:00", "21:30", "study", "@reading"], ["21:30", "23:30", "rest", "Free time"],
     ],
     6: [
       ["08:30", "09:15", "meal", "@nutrition"], ["09:15", "10:45", "study", "@dl"], ["10:45", "11:30", "study", "@german"], ["11:30", "12:00", "study", "@projects"],
-      ["12:00", "12:30", "study", "@review"], ["12:30", "18:30", "rest", "Free · travel, friends, errands"], ["18:30", "19:00", "travel", "Go to the gym"],
+      ["12:00", "12:30", "study", "@review"], ["12:30", "18:30", "rest", "Free · travel, friends, errands"], ["18:30", "19:00", "rest", "Get ready for the run"],
       ["19:00", "20:30", "exercise", "@exercise"], ["20:30", "21:30", "meal", "Shower and dinner"],
-      ["21:30", "22:00", "study", "@reading"], ["22:00", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["21:30", "22:00", "study", "@reading"], ["22:00", "23:30", "rest", "Free time"],
     ],
     7: [
       ["09:00", "09:45", "meal", "@nutrition"], ["10:00", "10:45", "study", "@german"], ["10:45", "12:00", "rest", "Rest"], ["12:00", "13:00", "meal", "Lunch"],
       ["13:00", "17:00", "rest", "Free · rest day"], ["17:00", "17:30", "study", "@weekly-review"], ["17:30", "19:00", "rest", "Free"],
-      ["19:00", "20:00", "meal", "Dinner"], ["20:00", "20:30", "study", "@reading"], ["20:30", "23:30", "rest", "Free time"], ["23:30", "24:00", "sleep", "@sleep"],
+      ["19:00", "20:00", "meal", "Dinner"], ["20:00", "20:30", "study", "@reading"], ["20:30", "23:30", "rest", "Free time"],
     ],
   }),
 

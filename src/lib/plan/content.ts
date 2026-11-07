@@ -35,6 +35,10 @@ const dailyTask = z.object({
   appendLongRunOn: z.number().int().min(1).max(7).optional(),
   habit: z.string().trim().max(40).optional(),
   anytime: z.boolean().optional(),
+  changes: z
+    .array(z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-09."), weekdays, detailByWeekday: z.record(z.coerce.number().int().min(1).max(7), z.string().max(60)).optional() }))
+    .max(10)
+    .optional(),
 });
 const result = z.object({ id: z.string().regex(/^[a-z0-9-]{1,30}$/), text: text("A monthly result", 120) });
 
@@ -106,24 +110,55 @@ export function contentOf(t: PlanTemplate): PlanContent {
 }
 
 /** Things the plan no longer has; edits saved before they were removed are cleaned of them when read. */
-const RETIRED = { goals: ["social-media"], dailyTasks: ["post"], weeklyGoals: ["youtube", "instagram"] };
+const RETIRED = { goals: ["social-media"], dailyTasks: ["post", "sleep"], weeklyGoals: ["youtube", "instagram"] };
+
+/** Default wording that changed; only an exact match is replaced, so the user's own wording is never touched. */
+const REWORDED: Record<string, string> = {
+  "Mon — easy run · Wed — strength · Thu — long run · Sat — gym": "Mon — easy run · Wed — strength · Thu — long run · Sat — run",
+  "Go to the gym": "Get ready for the run",
+  "Mon — easy run · Wed — strength · Thu — long run · Sat — run": "Mon, Wed, Fri — easy run · Thu — long run · Sat — run",
+  "Exercise 4x a week; 25 km long run; 65 kg": "Run 5 days a week; 25 km long run; 65 kg",
+};
 
 /** Bring an older saved edit up to date: drop retired items, fill what it predates (the timeline, "anytime"). */
 function upgrade(base: PlanTemplate, c: Partial<PlanContent>): PlanContent {
   const baseTasks = new Map(base.dailyTasks.map((d) => [d.key, d]));
+  const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const dailyTasks = (c.dailyTasks ?? base.dailyTasks)
+    .filter((d) => !RETIRED.dailyTasks.includes(d.key))
+    .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d))
+    .map((d) => (d.detailByWeekday?.[6] === "Gym" ? { ...d, detailByWeekday: { ...d.detailByWeekday, 6: "Running" } } : d))
+    // a task still on its original weekdays gets the schedule change that came later (e.g. running five days from 9 Nov)
+    .map((d) => {
+      const b = baseTasks.get(d.key);
+      return d.changes === undefined && b?.changes && sameDays(d.weekdays, b.weekdays) ? { ...d, changes: b.changes } : d;
+    });
   return {
-    goals: (c.goals ?? base.goals).filter((g) => !RETIRED.goals.includes(g.key)),
-    dailyTasks: (c.dailyTasks ?? base.dailyTasks)
-      .filter((d) => !RETIRED.dailyTasks.includes(d.key))
-      .map((d) => (d.anytime === undefined && baseTasks.get(d.key)?.anytime ? { ...d, anytime: true } : d)),
-    weeklyGoals: (c.weeklyGoals ?? base.weeklyGoals).filter((g) => !RETIRED.weeklyGoals.includes(g.key)),
+    goals: (c.goals ?? base.goals)
+      .filter((g) => !RETIRED.goals.includes(g.key))
+      .map((g) => (REWORDED[g.target] ? { ...g, target: REWORDED[g.target]! } : g)),
+    dailyTasks,
+    weeklyGoals: (c.weeklyGoals ?? base.weeklyGoals)
+      .filter((g) => !RETIRED.weeklyGoals.includes(g.key))
+      .map((g) => (REWORDED[g.target] ? { ...g, target: REWORDED[g.target]! } : g)),
     books: c.books ?? base.books,
     months: (c.months ?? base.months).map((m) => {
       const { youtube: _y, instagram: _i, ...rest } = m as typeof m & { youtube?: number; instagram?: number };
       return rest;
     }),
     weeks: c.weeks ?? base.weeks,
-    timeline: c.timeline ?? base.timeline,
+    timeline: (c.timeline ?? base.timeline).map((day) => {
+      const blocks = day.blocks
+        // sleep is no longer part of the plan: its task and its blocks go
+        .filter((b) => !(b.taskKey && RETIRED.dailyTasks.includes(b.taskKey)) && (b.kind as string) !== "sleep")
+        .map((b) => (REWORDED[b.title] ? { ...b, title: REWORDED[b.title]!, kind: b.title === "Go to the gym" ? ("rest" as const) : b.kind } : b));
+      // exercise now also runs on a day the saved timeline has no slot for: add one at 19:00 if that hour is free
+      const runsHere = dailyTasks.some((d) => d.key === "exercise" && (d.changes ?? []).some((ch) => ch.weekdays.includes(day.weekday)));
+      const free = !blocks.some((b) => b.taskKey === "exercise") && !blocks.some((b) => b.start < "20:00" && b.end > "19:00");
+      const classBusy = (base.schedule.find((s) => s.weekday === day.weekday)?.classes ?? []).some((cl) => cl.time.slice(0, 5) < "20:00" && cl.time.slice(6, 11) > "19:00");
+      if (runsHere && free && !classBusy) blocks.push({ id: `d${day.weekday}-run`, start: "19:00", end: "20:00", kind: "exercise", title: "", taskKey: "exercise" });
+      return { ...day, blocks };
+    }),
   };
 }
 
@@ -135,4 +170,47 @@ export function applyContent(base: PlanTemplate, content: Partial<PlanContent> |
 /** A fresh id that can't collide with an old (possibly ticked) one. */
 export function newId(prefix = "x"): string {
   return `${prefix}${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Small edits (used by the website editor and the Telegram bot)
+// ---------------------------------------------------------------------------
+
+const DAY_WORDS: Record<string, number[]> = {
+  mon: [1], tue: [2], wed: [3], thu: [4], fri: [5], sat: [6], sun: [7],
+  daily: [1, 2, 3, 4, 5, 6, 7], everyday: [1, 2, 3, 4, 5, 6, 7], weekdays: [1, 2, 3, 4, 5], weekend: [6, 7],
+};
+
+/** "mon wed fri" / "weekdays" / "daily" → ISO weekdays; null when a word isn't a day. */
+export function parseDays(words: string[]): number[] | null {
+  const days = new Set<number>();
+  for (const w of words) {
+    const set = DAY_WORDS[w.toLowerCase().replace(/[^a-z]/g, "").replace(/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/, (m) => m.slice(0, 3))];
+    if (!set) return null;
+    set.forEach((d) => days.add(d));
+  }
+  return days.size === 0 ? null : [...days].sort((a, b) => a - b);
+}
+
+/** A new daily task. It needs no slot on the timeline (`anytime`); it can be given one in the editor. */
+export function addDailyTask(c: PlanContent, title: string, weekdays: number[]): { content: PlanContent; key: string } {
+  const key = newId("t");
+  return { key, content: { ...c, dailyTasks: [...c.dailyTasks, { key, title: title.trim(), weekdays, anytime: true }] } };
+}
+
+export function renameDailyTask(c: PlanContent, key: string, title: string): PlanContent {
+  return { ...c, dailyTasks: c.dailyTasks.map((d) => (d.key === key ? { ...d, title: title.trim() } : d)) };
+}
+
+/** Remove a daily task; its blocks stay on the timeline as plain blocks with the task's name. Old ticks stop counting. */
+export function removeDailyTask(c: PlanContent, key: string): PlanContent {
+  const task = c.dailyTasks.find((d) => d.key === key);
+  return {
+    ...c,
+    dailyTasks: c.dailyTasks.filter((d) => d.key !== key),
+    timeline: c.timeline.map((day) => ({
+      ...day,
+      blocks: day.blocks.map((b) => (b.taskKey === key ? { id: b.id, start: b.start, end: b.end, kind: b.kind, title: task?.title ?? "Task" } : b)),
+    })),
+  };
 }
